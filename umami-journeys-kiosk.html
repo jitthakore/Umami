@@ -158,8 +158,9 @@ ul{list-style:none}
 .dish{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:10px 12px 10px 10px;border-radius:14px;background:var(--card);box-shadow:0 0 0 1px var(--rule)}
 .dish.on{box-shadow:0 0 0 2px var(--mustard)}
 .slot{position:relative;width:66px;height:66px;border-radius:50%;background:#FFFDF9;box-shadow:0 0 0 1.5px var(--mustard)}
-.slot img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;background:#FFFDF9;opacity:0;transition:opacity .25s}   /* a photo lies over the drawing and covers it once it has loaded */
+.slot img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;background:#FFFDF9;opacity:0;transition:opacity .25s;pointer-events:none}   /* a photo lies over the drawing and covers it once it has loaded. A press goes through to the button under it, so the photo cannot be dragged away */
 .slot img.in{opacity:1}
+.slot:has(.in){overflow:hidden}   /* a drawn sandwich's corner reaches past the ring, and must not show beside a photo */
 .slot .tok{--s:66%}
 .dish h3{font:700 18px/1.2 var(--body)}
 .dish p{margin-top:3px;font-size:14.5px;line-height:1.32;color:var(--ink-dim)}
@@ -288,7 +289,7 @@ ul{list-style:none}
 .co-plate{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;padding:14px 16px;border-radius:14px;background:var(--card);box-shadow:0 0 0 1px var(--rule)}
 .co-plate .mini{--m:min(22px,34cqw / (var(--un) * 1.2 + .4))}
 .co-items h3{font:700 19px/1.2 var(--body)}
-.co-items h3 .pill{margin-left:8px}
+.co-items h3 .pill{margin-left:8px;white-space:normal;text-wrap:balance;border-radius:12px}   /* on a phone a long deal name takes two lines, and the page stays its width; 12px still rounds a one-line label fully */
 .co-items p{margin-top:4px;color:var(--ink-dim);font-size:15px;line-height:1.35}
 .co-price{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 .co-price b{font:700 semi-expanded 21px/1.1 var(--body);font-variant-numeric:tabular-nums}
@@ -326,8 +327,8 @@ ul{list-style:none}
 .now b{font:400 28px/1.05 var(--display)}
 .now i{font-style:normal;font-weight:600;font-size:16px}
 .now strong{font:800 semi-expanded 34px/1 var(--body);font-variant-numeric:tabular-nums}
-#s-now:empty{min-height:82px}   /* on a slow connection this screen paints before the script arrives: the offer's space is held, */
-#s-now:empty~.s-go{visibility:hidden}   /* and the two buttons stay out of sight until there is a script to answer them */
+.hold{visibility:hidden}   /* on a slow connection this screen paints before the script arrives: an unseen copy of the first offer holds its place, */
+.s-copy:has(.hold) .s-go{visibility:hidden}   /* and the two buttons stay out of sight until there is a script to answer them */
 .s-go{display:flex;gap:12px;flex-wrap:wrap}
 .s-go button{min-height:84px;padding:0 44px;border-radius:18px;font:700 24px/1 var(--body);transition:transform .12s}
 .s-go button:active{transform:scale(.97)}
@@ -434,7 +435,6 @@ ul{list-style:none}
   .tier{font-size:16px}
   .amt{font-size:20px}
   .p-foot .pay{flex:1 0 auto;width:auto;min-height:52px;padding:0 18px;font-size:18px}
-  #s-now:empty{min-height:97px}
   .now{padding:10px 14px}
   .now b{font-size:22px}
   .now strong{font-size:26px}
@@ -482,7 +482,7 @@ ul{list-style:none}
     <div class="brand"><svg class="glyph" viewBox="0 0 40 20" aria-hidden="true"><use href="#tray"/></svg><span>Umami Journeys</span></div>
     <h1>The world on your plate</h1>
     <p class="s-sub">Eleven countries, fifty-five dishes, and as many as you like on every plate.</p>
-    <div id="s-now"></div>
+    <div id="s-now"><div class="now gilt hold"><span><b>Tuscan Sunshine</b><i>Italy, all five courses</i></span><strong>₹789</strong><em class="pill hot">save ₹101</em></div></div>
     <div class="s-go">
       <button class="gilt" data-a="start" data-m="in">Eat here</button>
       <button data-a="start" data-m="out">Take away</button>
@@ -512,8 +512,10 @@ const RATE = {journey: .11, world: .08, trio: .07, duo: .14};   // ponytail: fla
 const BAND = 6;      // section units in one row of a plate. A full-size plate is 4 (sandwich 2, four small sections 2). Past 6 the plate grows another row; it never turns a dish away.
 const IDLE_MS = 75000;
 const DIET = {};     // dish id -> 'veg' | 'nonveg' (egg counts as nonveg). Left empty on purpose: fill it from the kitchen's recipes, never by guessing.
-const PHOTO = {};    // dish id -> photo URL, for example {it1: 'img/it1.webp'}; the ids are in MENU below. A square picture with the dish filling it, 200 px across (the round
-                     // slot is 66 px at most, on screens up to 3x), about 10 KB as WebP. The drawn token shows while a photo loads, and stays if there is none or it fails.
+const PHOTO = {};    // dish id -> address of its photo, for example {it1: 'img/it1.webp', jp4: 'img/jp4.webp'}. List only photos that exist: a dish without an entry keeps its drawing,
+                     // so they can come a few at a time. An id is a country code and a course number (1 sandwich, 2 dip, 3 side, 4 drink, 5 dessert); MENU below has them all.
+                     // The file: 200 x 200 px WebP, about 10 KB, the dish seen from above, in the centre and filling the square. It shows as a circle of 66 px at most, on screens up to 3x.
+                     // Have the host cache the files (Cache-Control: max-age), or a list asks for its photos again every time it is reopened.
 
 const COURSES = ['sandwich', 'crispy', 'dip', 'drink', 'dessert'];
 const TRIO = ['sandwich', 'crispy', 'drink'];
@@ -730,19 +732,21 @@ function add(list, own) {
 function submitOrder(order) { console.log('order', order); }   // the one hand-off point: send the order to the kitchen printer or backend here
 
 /* ---------- fonts ----------
-   Fetched in the background, straight from Google's font host, and switched on only between screens: on a slow connection they
-   land seconds after the first tap, and text re-wraps when they do. Until then the stacks in :root fall through to system fonts.
+   Fetched in the background, straight from Google's font host, and switched on only when the screen changes: on a slow connection
+   they land seconds after the first tap, and text re-wraps when they do. Until then the stacks in :root fall through to system fonts.
    The two addresses are the "latin" files named in Google Fonts' own stylesheet for these families; take new ones from there if they ever stop answering.
+   They hold the letters of western European languages, not all of Latin: UJ.selfCheck() fails if the menu comes to need more.
    The rupee sign is a one-glyph face of its own, because Google files it in a second subset of 83 KB. It is the file Google Fonts
    returns for Anek Latin with &text=₹ (Copyright 2021 The Anek Project Authors, SIL Open Font License 1.1). */
-const AXES = {weight: '100 800', stretch: '75% 125%'};   // Anek Latin is one variable file: every weight, and the semi-expanded prices
+const AXES = {weight: '100 800', stretch: '75% 125%'};   // Anek Latin is one variable file: every weight, and the semi-expanded prices. Its two faces must say the same, or the rupee sign falls to a system font.
 const fonts = [];                                        // loaded faces, waiting for the next change of screen
 const useFonts = () => fonts.splice(0).forEach(f => document.fonts.add(f));
-for (const [family, src, desc] of [
-  ['Rozha One', 'https://fonts.gstatic.com/s/rozhaone/v17/AlZy_zVFtYP12Zncg2kRcn35.woff2', {}],
-  ['Anek Latin', 'https://fonts.gstatic.com/s/aneklatin/v11/co3DmWZulTRoU4a8dqrWo6Tppg.woff2', {...AXES, unicodeRange: 'U+0-20B8,U+20BA-10FFFF'}],   // everything but the rupee sign
+Promise.all([
+  ['Rozha One', 'https://fonts.gstatic.com/s/rozhaone/v17/AlZy_zVFtYP12Zncg2kRcn35.woff2'],
+  ['Anek Latin', 'https://fonts.gstatic.com/s/aneklatin/v11/co3DmWZulTRoU4a8dqrWo6Tppg.woff2', AXES],
   ['Anek Latin', 'data:font/woff2;base64,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', {...AXES, unicodeRange: 'U+20B9'}]
-]) new FontFace(family, `url(${src})`, desc).load().then(f => { fonts.push(f); if (!S.started) useFonts(); }, () => {});
+].map(([family, src, desc]) => new FontFace(family, `url(${src})`, desc).load()))
+  .then(got => { fonts.push(...got); if (!S.started) useFonts(); }, () => {});   // all three or none: the fonts change once, and a brand rupee sign never stands beside system digits
 
 /* ---------- drawing: food tokens and the plate ---------- */
 const STEAM = '<span class="steam up" style="--z:12"><i style="--k:0"></i><i style="--k:1"></i><i style="--k:2"></i></span>';
@@ -807,13 +811,10 @@ function bar() {
   return brand + `<nav class="seg" aria-label="Browse"><button data-a="home" aria-pressed="${S.view !== 'dishes'}">Journeys</button><button data-a="dishes" aria-pressed="${S.view === 'dishes'}">All dishes</button></nav>
     <button class="mode" data-a="mode" aria-label="${S.mode === 'in' ? 'Eating here. Change to take away' : 'Taking away. Change to eating here'}"><b>${S.mode === 'in' ? 'Eating here' : 'Taking away'}</b><span>Change</span></button>`;
 }
-// A dish's picture. The drawing is always there; a photo, if PHOTO has one, loads over it as it nears the screen and fades in when it is whole,
-// so the drawing is what shows while a photo is on its way and when there is none. A file that fails is not asked for again until the next order.
-const GONE = new Set();
-const slot = it => { const src = PHOTO[it.id];
-  return `<span class="slot">${token(it, {flat: 1})}${src && !GONE.has(src) ? `<img src="${esc(src)}" alt="" loading="lazy">` : ''}</span>`; };
-document.addEventListener('load', e => { if (e.target.closest?.('.slot')) e.target.className = 'in'; }, true);   // load and error do not bubble, hence the capture
-document.addEventListener('error', e => { if (e.target.closest?.('.slot')) GONE.add(e.target.getAttribute('src')); }, true);
+// A dish's picture. The drawing is always there; a photo, if PHOTO has one, loads over it and fades in when it is whole,
+// so the drawing is what shows while a photo is on its way, when there is none, and when it fails. render() gives the photo its address.
+const slot = it => `<span class="slot">${token(it, {flat: 1})}${PHOTO[it.id] ? `<img data-src="${esc(PHOTO[it.id])}" alt="">` : ''}</span>`;
+document.addEventListener('load', e => { if (e.target.closest?.('.slot')) e.target.className = 'in'; }, true);   // load does not bubble, hence the capture
 const onPlate = id => S.plates[S.at].items.filter(x => x === id).length;
 // Dishes that are not on the plate yet come first, dearest first. The ones already on it drop to the end of the list.
 const ranked = list => [...list].sort((a, b) => !!onPlate(a.id) - !!onPlate(b.id) || b.price - a.price);   // a.price - b.price would put the cheapest first
@@ -942,6 +943,7 @@ function roll() {   // count prices up or down so a deal landing is visible
 function render() {
   const pay = S.view === 'checkout' || S.view === 'done', has = totals().items, list = S.view + S.cid + S.course;
   const was = new Map(list === shown ? [...document.querySelectorAll('[data-d]')].map(el => [el.dataset.d, el.getBoundingClientRect()]) : []);
+  const pics = [...document.querySelectorAll('.slot img')];
   shown = list;
   if (!has) S.open = false;
   $('#app').classList.toggle('paying', pay);
@@ -949,7 +951,13 @@ function render() {
   $('#menu').innerHTML = VIEW[S.view]();
   $('#side').className = 'side' + (S.open ? ' open' : '') + (has ? '' : ' empty');   // set on every screen, so an open sheet and its scrim never outlive a move to checkout
   if (!pay) $('#side').innerHTML = side();
-  for (const img of document.querySelectorAll('.slot img')) if (img.complete && img.naturalWidth) img.className = 'in';   // every tap rebuilds the page: a photo the browser still holds is in place at once, without fading in again
+  // Every tap rebuilds the page, but a photo keeps the element it had: it is fetched once and stays in place, without loading or fading in again.
+  for (const img of document.querySelectorAll('.slot img:not([src])')) {
+    const k = pics.findIndex(p => !p.isConnected && p.dataset.src === img.dataset.src);
+    if (k >= 0) img.replaceWith(pics.splice(k, 1)[0]);
+    else { img.src = img.dataset.src; if (img.complete && img.naturalWidth) img.className = 'in'; }   // new on this screen: one the browser still holds is in place at once
+  }
+  for (const p of pics) if (!p.isConnected && !p.complete) p.src = '';   // a photo still on its way when its dish leaves the screen stops loading, and leaves the line to the photos now wanted
   fresh = new Set();
   // A dish that changes place in its list slides there, so one that drops to the end is seen going. Taps on the menu wait until it lands.
   document.querySelectorAll('[data-d]').forEach(el => {
@@ -987,7 +995,7 @@ function poke() {
 
 /* ---------- actions ---------- */
 const A = {
-  start: d => { useFonts(); S.started = true; S.mode = d.m; S.t0 = Date.now(); S.taps = 1; clearInterval(cycle); $('#start').hidden = true; $('#s-tray').innerHTML = ''; render(); },
+  start: d => { S.started = true; S.mode = d.m; S.t0 = Date.now(); S.taps = 1; clearInterval(cycle); $('#start').hidden = true; $('#s-tray').innerHTML = ''; render(); },
   home: () => S.view === 'done' ? A.reset() : nav('home'),
   dishes: () => nav('dishes'),
   course: d => { S.course = d.c; render(); const g = $('.grid2'); if (g.getBoundingClientRect().top < $('.courses').getBoundingClientRect().bottom) g.scrollIntoView(); },   // phone: back to the top of the list, under the pinned tabs
@@ -998,7 +1006,7 @@ const A = {
   add: d => { if (d.rel) S.taken++; add([d.id]); },
   journey: d => add(ids(BY[d.id]), true),
   trio: d => add(ids(BY[d.id], TRIO), true),
-  lucky: () => { const m = MENU[Math.floor(Math.random() * MENU.length)]; S.view = 'country'; S.cid = m.id; add(ids(m), true); $('#menu').scrollTop = 0; scrollTo(0, 0); },
+  lucky: () => { useFonts(); const m = MENU[Math.floor(Math.random() * MENU.length)]; S.view = 'country'; S.cid = m.id; add(ids(m), true); $('#menu').scrollTop = 0; scrollTo(0, 0); },
   nudge: () => { const n = nudge(S.plates[S.at]); if (n) { S.taken++; add(n.add.map(i => i.id)); } },
   quiet: () => { S.plates[S.at].quiet = true; render(); },
   remove: d => {
@@ -1024,7 +1032,7 @@ const A = {
     autoT = setInterval(() => { const el = $('#auto'); if (el) el.textContent = --n; if (!n) A.reset(); }, 1000);
   },
   awake: () => { clearInterval(stillT); $('#still').hidden = true; },
-  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; GONE.clear(); $('#still').hidden = true; $('#start').hidden = false; render(); attract(); }
+  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; useFonts(); $('#still').hidden = true; $('#start').hidden = false; render(); attract(); }
 };
 document.addEventListener('pointerdown', e => { S.taps++; poke(); if (!$('#still').hidden && !e.target.closest('[data-a=reset]')) A.awake(); });
 document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b && A[b.dataset.a] && !(performance.now() < hold && b.closest('#menu'))) A[b.dataset.a](b.dataset); });
@@ -1044,6 +1052,10 @@ function selfCheck() {
   const keep = S; S = init(0); S.plates[0].items = [it[0]];
   const r = ranked(MENU.map(m => m.items.sandwich)); S = keep;
   ok(r[r.length - 1].id === it[0] && r.slice(0, -1).every((x, i, a) => !i || a[i - 1].price >= x.price), 'dishes on the plate list last, the rest dearest first');
+  ok(S.started || !fonts.length, 'no loaded font waits while the start screen shows');
+  ok(!/[^ -ÿ–—‘’“”…−₹]/.test(MENU.map(m => [m.country, m.title, m.story, m.prep, COURSES.map(c => [m.items[c].name, m.items[c].desc])]).join()), 'the menu has a letter the two font files lack: load their "latin-ext" files too');
+  for (const id in PHOTO) ok(ITEM[id], 'PHOTO lists ' + id + ', which is not a dish');
+  ok(Object.values(ITEM).every(it => slot(it).includes('<img') === !!PHOTO[it.id]), 'a dish gets a photo exactly when PHOTO lists one');
   let n = 0;   // every possible five-course plate: completing it from four dishes costs something, but less than the fifth dish alone
   const walk = (k, p) => {
     if (k === 5) {
