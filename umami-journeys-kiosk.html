@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Umami Journeys Kiosk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wdth,wght@75..125,100..800&family=Rozha+One&display=swap">
+<style>
+:root{
+  /* Layout idea: a service counter. The menu is on the left, your plate sits on the right and never leaves.
+     On a phone, or any screen too short for that, the plate docks to the bottom edge and opens as a sheet.
+     Colour is 60-30-10 and flat: ivory for the menu (60), deep green for the plate counter and controls (30),
+     and the last 10 shared by mustard (prices and actions) and ruby (savings and deals). Food keeps its own colours. */
+  --ivory:#F8F4EA; --card:#FFFFFF; --ink:#0B1F17; --ink-dim:#56685F; --rule:rgba(11,31,23,.14); --wash:rgba(11,31,23,.06);
+  --green:#0C4A35; --green-rise:#17604A; --on-green:#F8F4EA; --on-green-dim:#B5CFC2; --rule-green:rgba(248,244,234,.2);
+  --mustard:#E0AA1F; --ruby:#B5123E;
+  --display:'Rozha One','Bodoni 72','Didot','Playfair Display',Georgia,serif;
+  --body:'Anek Latin',system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans',sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ivory);color:var(--ink);font:450 17px/1.35 var(--body);overflow-wrap:break-word;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--green);outline-offset:3px}
+.side :focus-visible,.co-pay :focus-visible{outline-color:var(--mustard)}
+h1,h2,h3,p,ul{margin:0;padding:0;font-weight:inherit}
+ul{list-style:none}
+[hidden]{display:none!important}
+
+/* ---------- shell ---------- */
+.app{height:100%;display:grid;grid-template:"bar side" auto "menu side" minmax(0,1fr) / minmax(0,1fr) clamp(290px,33vw,460px)}
+.app.paying{grid-template:"bar" auto "menu" minmax(0,1fr) / minmax(0,1fr)}
+.app.paying .side{display:none}
+.bar{grid-area:bar;display:flex;align-items:center;gap:10px 14px;padding:14px max(24px,(100% - 1560px) / 2) 10px;flex-wrap:wrap;container-type:inline-size}
+.menu{grid-area:menu;overflow-y:auto;padding:6px 24px 24px;view-transition-name:menu;container-type:inline-size}
+.menu>*{max-width:1560px;margin-inline:auto}   /* on very wide screens the menu stays one readable column */
+.side{grid-area:side;display:flex;flex-direction:column;min-height:0;background:var(--green);color:var(--on-green)}
+
+.brand{display:flex;align-items:center;gap:10px;font:400 25px/1 var(--display);margin-right:auto}
+.glyph{width:42px;height:21px;flex:none;color:var(--green)}
+.bar .brand{min-height:44px}
+.seg{display:flex;padding:4px;border-radius:999px;background:var(--wash)}
+.seg button{min-height:44px;padding:0 18px;border-radius:999px;font-weight:650;color:var(--ink-dim)}
+.seg [aria-pressed=true]{background:var(--green);color:var(--on-green)}
+.mode{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 6px 0 16px;border-radius:999px;box-shadow:inset 0 0 0 1.5px var(--rule)}
+.mode b{font-weight:650}
+.mode span{font-size:14px;color:var(--ink-dim);padding:4px 12px;border-radius:999px;background:var(--wash)}
+
+.lead{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.lead h1{font:400 clamp(30px,3vw,40px)/1.05 var(--display)}
+.lead p{color:var(--ink-dim);max-width:84ch}
+/* the 10: mustard marks prices and actions, ruby marks savings and deals */
+.pill{display:inline-block;padding:0 9px;border-radius:999px;background:var(--mustard);color:var(--ink);font-style:normal;font-weight:650;font-size:14px;line-height:1.55;white-space:nowrap}
+.gilt{background:var(--mustard);color:var(--ink)}
+.hot{background:var(--ruby);color:#fff}
+.pill.on{background:var(--green);color:var(--on-green)}
+.pill.mine{background:var(--ruby);color:#FFE08A}
+
+/* ---------- home: the wall of journeys ---------- */
+.home{min-height:100%;display:flex;flex-direction:column}
+.wall{--cols:4;flex:1;max-height:calc(12 / var(--cols) * 392px);display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));grid-auto-rows:minmax(172px,1fr);gap:12px}   /* ponytail: the 12 is the tile count (eleven journeys and Surprise me), which fills whole rows at 4, 3, 2 or 1 across. Change it if the menu grows. */
+.tile{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:7px;padding:13px 16px 14px;border-radius:14px;transition:transform .12s}
+.tile:not(.lucky){background:var(--card);box-shadow:0 0 0 1px var(--rule)}
+.tile:active{transform:scale(.97)}
+.t-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:6px 8px;width:100%}
+.t-country{font-weight:650;font-size:clamp(14px,1.25cqw,18px);line-height:1.3;color:var(--ink-dim)}
+.t-title{font:400 clamp(19px,2.3cqw,32px)/1.04 var(--display);text-wrap:balance}
+.t-price{margin-top:auto;display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}
+.t-price b{padding:5px 14px;border-radius:999px;background:var(--mustard);font:700 semi-expanded clamp(18px,1.7cqw,24px)/1.2 var(--body);font-variant-numeric:tabular-nums}
+.lucky .t-country{color:var(--ink)}
+.lucky .t-price{font-weight:600;font-size:15px;line-height:1.3}
+
+/* a flat top-down plate, used on tiles, the country page and the order review */
+.mini{--m:26px;--g:calc(var(--m) * .2);display:inline-flex;flex-direction:column;flex:none;gap:var(--g);
+  padding:calc(var(--g) * 1.5);border-radius:calc(var(--m) * .36);background:#FFFDF9;box-shadow:0 0 0 calc(var(--m) * .06) var(--mustard)}
+.mini>.band{display:grid;grid-auto-flow:column;grid-template-rows:var(--m) var(--m);grid-auto-columns:var(--m);gap:var(--g)}
+.cell{position:relative;border-radius:calc(var(--m) * .2);background:#EFE8DB}
+.cell.big,.well.big{grid-row:span 2;grid-column:span 2}
+.cell.tall,.well.tall{grid-row:span 2}
+.cell.cup,.well.cup{border-radius:50%;aspect-ratio:1;width:100%;align-self:center;justify-self:center}
+.tile .mini{--m:clamp(15px,2.1cqw,30px)}
+.cell.fresh{animation:pop .45s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes pop{from{scale:0}}
+
+/* ---------- country page: the combo is the hero, single dishes are a quiet list under it ---------- */
+.country{display:flex;flex-direction:column;gap:12px}
+.hero{view-transition-name:hero;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px 28px;align-items:center;padding:22px 24px 24px;border-radius:18px;background:var(--card);box-shadow:0 0 0 2px var(--mustard)}
+.h-copy{display:flex;flex-direction:column;gap:8px}
+.h-plate{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.h-plate .mini{--m:clamp(30px,7cqw,58px)}
+.h-plate p{max-width:42ch;font-size:14.5px;line-height:1.35;color:var(--ink-dim)}
+.back{align-self:flex-start;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 16px 0 12px;border-radius:999px;font-weight:650;box-shadow:inset 0 0 0 1.5px currentColor}
+.back::before{content:"";width:9px;height:9px;border-left:2.5px solid;border-bottom:2.5px solid;transform:rotate(45deg);margin-left:4px}
+.c-country{font-weight:650;color:var(--ink-dim)}
+.c-title{font:400 clamp(28px,7.4cqw,60px)/1 var(--display);text-wrap:balance}
+.c-story{max-width:40ch;line-height:1.4;color:var(--ink-dim)}
+.ctas{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:10px}
+.cta{display:flex;flex-wrap:wrap;align-items:center;align-content:center;gap:4px 12px;text-align:left;padding:18px 24px;border-radius:16px;transition:transform .12s}
+.cta:active{transform:scale(.98)}
+.cta span{flex-basis:100%;font-weight:700;font-size:24px;line-height:1.15}
+.cta b{font:700 semi-expanded 34px/1 var(--body);font-variant-numeric:tabular-nums}
+.cta small{flex-basis:100%;font-size:15px;font-weight:550}
+.cta.alt{padding:14px 18px;color:var(--green);box-shadow:inset 0 0 0 1.5px var(--green)}
+.cta.alt span{font-size:18px}.cta.alt b{font-size:22px}
+
+/* a miniature kitchen on each journey page: one neutral chef figure, the country shows in the technique and the ingredient */
+.kitchen{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%}
+.chef{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.chef svg{width:100%;max-width:104px;height:auto;overflow:visible}
+.chef figcaption{font-size:13px;line-height:1.25;color:var(--ink-dim);text-wrap:balance}
+.k-body{fill:var(--green)}
+.k-apron,.k-hat{fill:#FFFDF9;stroke:var(--green);stroke-width:1.2}
+.k-top{fill:var(--mustard)}
+.k-ves{fill:#EFE8DB;stroke:var(--green);stroke-width:1.2;stroke-linejoin:round}
+.k-limb{fill:none;stroke:var(--green);stroke-width:4.5;stroke-linecap:round}
+.k-tool{fill:#C9BEAB;stroke:var(--green);stroke-width:1}
+.k-line{fill:none;stroke:#A99C86;stroke-width:2.6;stroke-linecap:round}
+.k-flow{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-dasharray:17;stroke-dashoffset:17;animation:k-flow 2.6s linear infinite}
+.k-arm{transform-origin:38px 37px;animation:k-stir 1.5s ease-in-out infinite}
+.k-pound .k-arm{animation:k-pound .8s cubic-bezier(.5,0,.9,.4) infinite}
+.k-chop .k-arm{animation:k-chop 1.5s ease-in-out infinite}
+.k-flip .k-arm{animation:k-flip 1.7s ease-in-out infinite}
+.k-pour .k-arm{animation:k-pour 2.6s ease-in-out infinite}
+.k-roll .k-arm{animation:k-roll .9s ease-in-out infinite}
+.k-roll .two{animation-direction:reverse}
+.k-toss{transform-origin:63.5px 42px;animation:k-toss 1.7s ease-in-out infinite}
+.k-ball{transform-origin:56px 50px;animation:k-ball .9s ease-in-out infinite}
+@keyframes k-stir{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(8deg)}}
+@keyframes k-pound{0%,100%{transform:rotate(-13deg)}45%{transform:rotate(5deg)}}
+@keyframes k-chop{0%,30%,60%,100%{transform:rotate(-20deg)}15%,45%{transform:rotate(1deg)}}
+@keyframes k-flip{0%,55%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}}
+@keyframes k-toss{0%,12%,55%,100%{transform:none}32%{transform:translateY(-15px) rotate(180deg)}}
+@keyframes k-pour{0%,100%{transform:rotate(0)}30%,75%{transform:rotate(18deg)}}
+@keyframes k-flow{0%,28%{stroke-dashoffset:17}38%,72%{stroke-dashoffset:0}82%,100%{stroke-dashoffset:-17}}
+@keyframes k-roll{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
+@keyframes k-ball{50%{transform:rotate(180deg) scale(1.07,.93)}}
+
+/* related dishes that are not on the plate yet */
+.rel-box{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.country .rel-box{margin:0}
+.rel-box h2{font:700 17px/1.3 var(--body);color:var(--ruby)}
+.rels{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:8px}
+.rel{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;text-align:left;padding:8px 12px 8px 8px;border-radius:14px;background:var(--card);box-shadow:0 0 0 1.5px var(--ruby);transition:transform .12s}
+.rel:active{transform:scale(.97)}
+.rel .slot{width:52px;height:52px}
+.r-t{display:flex;flex-direction:column;gap:1px}
+.r-t b{font-weight:700;font-size:16px;line-height:1.2}
+.r-t i{font-style:normal;font-size:13.5px;color:var(--ink-dim)}
+.r-buy{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+
+.rows h2{font:650 16px/1.3 var(--body);color:var(--ink-dim);padding:6px 0 8px}
+.singles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(290px,100%),1fr));gap:0 24px}
+.dish{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:10px 12px 10px 10px;border-radius:14px;background:var(--card);box-shadow:0 0 0 1px var(--rule)}
+.dish.on{box-shadow:0 0 0 2px var(--mustard)}
+.slot{position:relative;width:66px;height:66px;border-radius:50%;background:#FFFDF9;box-shadow:0 0 0 1.5px var(--mustard)}
+.slot img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.slot .tok{--s:66%}
+.dish h3{font:700 18px/1.2 var(--body)}
+.dish p{margin-top:3px;font-size:14.5px;line-height:1.32;color:var(--ink-dim)}
+.chip{display:inline-block;margin-right:7px;padding:0 8px;border-radius:999px;font-size:13px;font-weight:700;line-height:1.5;background:var(--wash);color:var(--ink)}
+.dish .pill{font-size:13px}
+.d-buy{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+.price{padding:6px 13px;border-radius:999px;background:var(--mustard);font:700 semi-expanded 18px/1 var(--body);font-variant-numeric:tabular-nums}
+.add{min-width:74px;min-height:46px;padding:0 18px;border-radius:999px;background:var(--green);color:var(--on-green);font-weight:700;transition:transform .12s}
+.add:active{transform:scale(.94)}
+.dish.sm{gap:12px;padding:9px 0;border-radius:0;background:none;box-shadow:none;border-top:1px solid var(--rule)}
+.dish.sm .slot{width:46px;height:46px}
+.dish.sm h3{font-size:16px}
+.dish.sm p{font-size:13.5px}
+.dish.sm .d-buy{flex-direction:row;align-items:center;gap:10px}
+.dish.sm .price{padding:0;background:none;font-size:16px}
+.dish.sm .add{min-width:44px;width:44px;min-height:44px;padding:0;background:none;color:var(--green);box-shadow:inset 0 0 0 1.5px var(--green);font-size:22px;line-height:1}
+.diet{display:inline-block;position:relative;width:.82em;height:.82em;margin-right:.4em;border:2px solid;background:#fff;vertical-align:-.04em}
+.diet::after{content:"";position:absolute;background:currentColor}
+.diet.veg{color:#0A8A3A}.diet.veg::after{inset:17%;border-radius:50%}
+.diet.nonveg{color:#8B4513}.diet.nonveg::after{inset:8%;clip-path:polygon(50% 8%,94% 90%,6% 90%)}
+
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tab{min-height:46px;padding:0 20px;border-radius:999px;font-weight:650;background:var(--wash);color:var(--ink-dim)}
+.tab[aria-selected=true]{background:var(--green);color:var(--on-green)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:8px}
+
+/* ---------- the plate panel (the 30) ---------- */
+.p-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:16px 18px 0}
+.p-head h2{font:400 24px/1 var(--display);margin-right:auto}
+.pchip{min-height:44px;min-width:44px;padding:0 13px;border-radius:999px;font-weight:650;font-size:15px;color:var(--on-green-dim);box-shadow:inset 0 0 0 1.5px var(--rule-green)}
+.pchip[aria-pressed=true]{background:var(--on-green);color:var(--ink);box-shadow:none}
+.pchip.new{padding:0;font-size:22px;line-height:1;border:1.5px dashed color-mix(in srgb,var(--on-green) 45%,transparent);box-shadow:none}
+.more-btn{display:none}
+.stagewrap{container-type:inline-size;flex:none}
+.stage{--h:min(60cqw,var(--hmax,270px),34vh);position:relative;height:calc(var(--h) + var(--n,0) * 10px + var(--x,0) * 44px);perspective:1100px;perspective-origin:50% 12%}
+.p-mid{flex:1;min-height:0;overflow-y:auto;padding:0 18px 8px;display:flex;flex-direction:column;gap:10px}
+.nudge,.pb{padding:11px 14px 9px;border-radius:14px;font-size:15.5px;line-height:1.35}
+.nudge strong{font-weight:750}
+.n-btns{display:flex;align-items:center;gap:4px 16px;flex-wrap:wrap;margin-top:7px}
+.n-go{min-height:44px;padding:0 18px;border-radius:999px;background:var(--mustard);color:var(--ink);font-weight:700}
+.n-no{min-height:44px;padding:0 6px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.line{display:grid;grid-template-columns:minmax(0,1fr) auto 44px;align-items:center;gap:8px;min-height:46px;border-top:1px solid var(--rule-green)}
+.line:first-child{border-top:0}
+.l-n{font-weight:650;line-height:1.2;padding:5px 0}
+.l-n small{display:block;font-size:13.5px;font-weight:500;color:var(--on-green-dim)}
+.line>b{font:650 16px/1 var(--body);font-variant-numeric:tabular-nums}
+.x{position:relative;width:44px;height:44px;border-radius:50%;background:var(--green-rise)}
+.x::before,.x::after{content:"";position:absolute;left:14px;right:14px;top:21px;height:2px;border-radius:2px;background:var(--on-green);transform:rotate(45deg)}
+.x::after{transform:rotate(-45deg)}
+.p-foot{flex:none;display:flex;flex-direction:column;gap:10px;padding:12px 18px 18px;border-top:1px solid var(--rule-green)}
+.sum{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sum div{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.tier{font-weight:700;font-size:18px;line-height:1.2}
+.amt{font:700 semi-expanded 27px/1 var(--body);font-variant-numeric:tabular-nums}
+.sum.all .tier{font-size:16px;font-weight:650}.sum.all .amt{font-size:20px}
+.pay{width:100%;min-height:62px;padding:0 24px;border-radius:16px;font:700 semi-expanded 21px/1 var(--body);font-variant-numeric:tabular-nums;transition:transform .12s}
+.pay:active{transform:scale(.98)}
+.hint{color:var(--ink-dim);font-size:15px;line-height:1.4}
+.side .hint,.co-pay .hint{color:var(--on-green-dim)}
+
+/* ---------- the plate, in 3D. It grows a section for every dish: a sandwich takes a large square, everything else a small one ---------- */
+.rig{--W:min(80cqw,var(--wmax,430px),var(--h) * 1.5);--u:calc(var(--W) / 140);--rx:52deg;--rz:-11deg;--k:calc(.235 * var(--un,4) + .06);--dp:calc(.06 + .47 * var(--rows,1));
+  position:absolute;left:48%;top:calc(var(--h) * .6 + var(--x,0) * 20px);width:calc(var(--W) * var(--k));height:calc(var(--W) * var(--dp));margin:calc(var(--W) * var(--dp) / -2) 0 0 calc(var(--W) * var(--k) / -2);
+  transform:rotateX(var(--rx)) rotateZ(var(--rz));scale:var(--sc,1) var(--sc,1) var(--sc,1);transform-style:preserve-3d}
+.rig::before{content:"";position:absolute;inset:8% -2% -14% 4%;border-radius:24%;background:rgba(2,20,13,.6);filter:blur(calc(var(--W) * .05));
+  transform:translateZ(calc((var(--n,0) * -6.5 - 7) * var(--u)))}
+.bob{position:absolute;inset:0;transform-style:preserve-3d}
+.slab{--c:calc(var(--W) * .205);--gp:calc(var(--W) * .03);position:absolute;inset:0;display:flex;flex-direction:column;gap:var(--gp);padding:calc(var(--W) * .045);
+  border-radius:calc(var(--W) * .055);transform-style:preserve-3d;background:#FFFDF9;
+  box-shadow:inset 0 0 0 calc(var(--W) * .004) #FFFFFF,inset 0 0 0 calc(var(--W) * .013) var(--mustard),inset 0 0 0 calc(var(--W) * .017) #FFFFFF}
+.slab>.band{display:grid;grid-auto-flow:column;grid-template-rows:var(--c) var(--c);grid-auto-columns:var(--c);gap:var(--gp);transform-style:preserve-3d}
+.slab>b{position:absolute;inset:0;border-radius:inherit;background:#E3DACB;transform:translateZ(calc(var(--i) * -1 * var(--u)))}
+.slab>b:nth-of-type(4){background:#C9BEAB}
+.slab.under{transform:translateZ(calc(var(--d) * -6.5 * var(--u))) rotateZ(calc(var(--j) * 1deg))}
+.shine{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;transform:translateZ(.5px)}
+.shine::after{content:"";position:absolute;top:-30%;bottom:-30%;left:-45%;width:16%;background:rgba(224,170,31,.5);transform:skewX(-22deg)}
+.well{position:relative;border-radius:calc(var(--W) * .032);transform-style:preserve-3d;background:#F1EADD;
+  box-shadow:inset calc(var(--W) * .008) calc(var(--W) * .01) calc(var(--W) * .02) rgba(90,70,48,.36),inset calc(var(--W) * -.004) calc(var(--W) * -.005) calc(var(--W) * .008) rgba(255,255,255,.95)}
+.well.empty{cursor:pointer}
+.well.empty::before{content:"";position:absolute;inset:14%;border-radius:inherit;border:calc(var(--u) * .7) dashed rgba(12,74,53,.4)}
+.up{position:absolute;left:50%;bottom:50%;transform-origin:50% 100%;
+  transform:translateX(-50%) translateZ(calc(var(--z,0) * var(--u))) rotateZ(calc(var(--rz) * -1)) rotateX(calc(var(--rx) * -1))}
+.tag{--z:1;padding:.12em .7em;border-radius:999px;background:var(--green);color:var(--on-green);font:700 calc(max(11.5px,var(--u) * 4.2) / var(--sc))/1.35 var(--body);white-space:nowrap}
+
+/* food tokens: flat stacked layers that read as a dish from above and from the side */
+.tok{--r:50%;position:absolute;left:50%;top:50%;width:var(--s,76%);aspect-ratio:1;translate:-50% -50%;transform-style:preserve-3d}
+.tok>i{position:absolute;inset:0;display:block;border-radius:var(--r);background:var(--f);transform:translateZ(calc(var(--z) * var(--u)));box-shadow:inset 0 0 0 1px rgba(60,30,10,.1)}
+.tok.flat>i{transform:none}
+.flat .up{display:none}
+.tok.flat>.bun{translate:-12% -12%}
+.tok>.sh{inset:-4%;box-shadow:none;background:rgba(60,40,20,.32);filter:blur(calc(var(--u) * 1.6))}
+.tok.flat>.sh{display:none}
+.t-sandwich{--r:18%;--s:82%}
+.t-sandwich>.top{background:radial-gradient(circle,#FFF3D2 0 11%,transparent 12%) 7% 7%/25% 25%,#E2A64B}
+.t-crispy{--r:16%;--s:80%}
+.tok>.st{inset:41% -2%;border-radius:22%}
+.tok>.rd{inset:auto;width:44%;height:44%;border-radius:50%;background:radial-gradient(circle at 62% 64%,var(--g) 0 11%,transparent 12%),var(--f)}
+.tok>.rg{inset:auto;width:48%;height:48%;border-radius:50%;box-shadow:none;background:radial-gradient(circle,transparent 0 35%,var(--f) 36% 66%,transparent 67%)}
+.t-dip{--s:74%}
+.t-dip>.top{background:radial-gradient(circle at 58% 60%,var(--g) 0 9%,transparent 10%),radial-gradient(circle,var(--f) 0 55%,var(--mustard) 56% 59%,#FFFDF9 60%)}
+.t-dessert{--s:66%}
+.tok>.sc{background:radial-gradient(circle,#FFFDF9 0 84%,var(--mustard) 85% 89%,#FFFDF9 90%)}
+.t-drink{--s:82%}
+.t-drink>.hot{background:radial-gradient(circle at 50% 54%,var(--g) 0 22%,transparent 23%),radial-gradient(circle,var(--f) 0 72%,var(--mustard) 73% 77%,#FFFDF9 78%)}
+.t-drink>.iced{background:linear-gradient(rgba(255,255,255,.6),rgba(255,255,255,.6)) 30% 36%/26% 26% no-repeat,linear-gradient(rgba(255,255,255,.42),rgba(255,255,255,.42)) 68% 62%/22% 22% no-repeat,radial-gradient(circle at 68% 28%,var(--g) 0 11%,transparent 12%),radial-gradient(circle,var(--f) 0 78%,#F4F1EA 79%)}
+.pick{width:calc(var(--u) * .7);height:calc(var(--u) * 13);background:var(--mustard);border-radius:1px}
+.pick b{position:absolute;left:100%;top:0;padding:.1em .55em;border-radius:0 3px 3px 0;background:#FFFDF9;color:var(--green);font:700 calc(max(11.5px,var(--u) * 4) / var(--sc))/1.3 var(--body);white-space:nowrap;box-shadow:0 0 0 1px var(--mustard)}
+.straw{width:calc(var(--u) * 1.3);height:calc(var(--u) * 10);margin-left:14%;border-radius:2px;background:var(--mustard);
+  transform:translateX(-50%) translateZ(calc(var(--z) * var(--u))) rotateZ(calc(var(--rz) * -1)) rotateX(calc(var(--rx) * -1)) rotate(11deg)}
+.far .pick,.far .steam{display:none}
+.steam{width:calc(var(--u) * 20);height:calc(var(--u) * 40);pointer-events:none}
+.steam i{position:absolute;bottom:0;left:calc(var(--k) * 32%);width:26%;height:50%;border-radius:50%;opacity:0;background:rgba(255,255,255,.55);filter:blur(calc(var(--u) * 2));animation:steam 3.6s ease-in-out calc(var(--k) * -1.2s) infinite}
+@keyframes steam{0%{transform:translateY(25%) scaleX(.7);opacity:0}35%{opacity:.8}100%{transform:translateY(-75%) scaleX(1.6) skewX(8deg);opacity:0}}
+
+.tok.fresh{animation:drop .58s cubic-bezier(.3,.6,.35,1) var(--dl,0ms) both}
+@keyframes drop{0%{transform:translateZ(calc(var(--u) * 80)) scale(0)}18%{transform:translateZ(calc(var(--u) * 64)) scale(.92)}62%{transform:translateZ(0) scale(1)}78%{transform:translateZ(calc(var(--u) * 3.5))}100%{transform:translateZ(0)}}
+.bob.dip{animation:dip .5s ease-out .3s}
+@keyframes dip{40%{transform:translateZ(calc(var(--u) * -2.6))}}
+.bob.sweep .shine::after{animation:sweep 1s ease-out .55s}
+@keyframes sweep{to{transform:translateX(1000%) skewX(-22deg)}}
+
+/* ---------- checkout ---------- */
+.co{display:grid;grid-template-columns:minmax(0,1fr) clamp(340px,38vw,480px);gap:24px;align-items:start;max-width:1180px;margin:0 auto}
+.co h1{font:400 clamp(32px,3.2vw,44px)/1.05 var(--display);margin-bottom:14px}
+.co-order{display:flex;flex-direction:column;gap:10px}
+.co-plate{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;padding:14px 16px;border-radius:14px;background:var(--card);box-shadow:0 0 0 1px var(--rule)}
+.co-plate .mini{--m:min(22px,34cqw / (var(--un) * 1.2 + .4))}
+.co-items h3{font:700 19px/1.2 var(--body)}
+.co-items h3 .pill{margin-left:8px}
+.co-items p{margin-top:4px;color:var(--ink-dim);font-size:15px;line-height:1.35}
+.co-price{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.co-price b{font:700 semi-expanded 21px/1.1 var(--body);font-variant-numeric:tabular-nums}
+.link{min-height:44px;color:var(--ink-dim);font-weight:600;font-size:15px;text-decoration:underline;text-underline-offset:3px}
+.duo{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:4px 16px;font-weight:650}
+.pb{background:var(--card);box-shadow:0 0 0 2px var(--ruby)}
+.pb h2{font:750 18px/1.2 var(--body);margin-bottom:4px;color:var(--ruby)}
+.pb-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:6px 0}
+.pb-row .n-go{flex:none}
+.co-pay{position:sticky;top:0;min-height:calc(100vh - 112px);display:flex;flex-direction:column;gap:12px;padding:24px;border-radius:18px;background:var(--green);color:var(--on-green)}
+.co-pay h2{font:800 semi-expanded clamp(32px,3.4vw,44px)/1 var(--body);font-variant-numeric:tabular-nums}
+.co-pay h2 span{color:var(--mustard)}
+.co-pay .tabs{margin:0}
+.co-pay .tab{background:var(--green-rise);color:var(--on-green-dim)}
+.co-pay .tab[aria-selected=true]{background:var(--on-green);color:var(--ink)}
+.co-pay .pill{align-self:flex-start}
+.qr{display:grid;place-items:center;aspect-ratio:1;max-width:240px;width:100%;margin:2px auto;padding:24px;border-radius:14px;border:3px dashed var(--ink);text-align:center;font-weight:650;line-height:1.3;color:var(--ink);background:var(--card)}
+
+/* ---------- order placed ---------- */
+.done{min-height:100%;display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);gap:clamp(20px,4vw,56px);align-items:stretch}
+.d-num{display:flex;flex-direction:column;justify-content:center;gap:10px;padding:clamp(24px,4vw,48px);border-radius:28px;background:var(--green);color:var(--on-green);outline:2px solid var(--mustard);outline-offset:-14px}
+.d-num h1{font:400 clamp(56px,13cqw,190px)/.9 var(--display);font-variant-numeric:tabular-nums;color:var(--mustard)}
+.d-k{font-weight:650;font-size:20px}
+.d-copy{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:14px}
+.d-l{font-size:22px;line-height:1.4;max-width:34ch}
+.done .pay{width:auto}
+
+/* ---------- start screen ---------- */
+.start{position:fixed;inset:0;z-index:20;overflow-y:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:clamp(20px,4vw,56px);padding:clamp(20px,4vw,56px);background:var(--ivory)}
+.s-copy{display:flex;flex-direction:column;align-items:flex-start;gap:18px}
+.start h1{font:400 clamp(44px,6.1vw,96px)/.98 var(--display);text-wrap:balance}
+.s-sub{font-size:clamp(17px,1.6vw,21px);color:var(--ink-dim);max-width:34ch}
+.now{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding:14px 20px;border-radius:14px}
+.now>span{display:flex;flex-direction:column;gap:3px}
+.now b{font:400 28px/1.05 var(--display)}
+.now i{font-style:normal;font-weight:600;font-size:16px}
+.now strong{font:800 semi-expanded 34px/1 var(--body);font-variant-numeric:tabular-nums}
+.s-go{display:flex;gap:12px;flex-wrap:wrap}
+.s-go button{min-height:84px;padding:0 44px;border-radius:18px;font:700 24px/1 var(--body);transition:transform .12s}
+.s-go button:active{transform:scale(.97)}
+.s-go button+button{color:var(--green);box-shadow:inset 0 0 0 1.5px var(--green)}
+.s-stage{--wmax:760px;--hmax:680px;container-type:size;align-self:stretch;overflow:hidden;display:grid;align-items:center;border-radius:28px;background:var(--green);outline:2px solid var(--mustard);outline-offset:-14px}
+.s-stage .stage{--h:min(74cqw,92cqh,var(--hmax))}
+.s-stage .rig{--W:min(78cqw,var(--wmax),var(--h) * 1.5);left:47%;top:calc(var(--h) * .54)}
+
+.still{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px;background:rgba(11,31,23,.6)}
+.still>div{display:flex;flex-direction:column;gap:14px;max-width:420px;padding:28px;border-radius:20px;background:var(--card)}
+.still h2{font:400 34px/1.05 var(--display)}
+.still .link{align-self:flex-start}
+
+::view-transition-old(menu),::view-transition-new(menu){animation-duration:.22s}
+::view-transition-group(hero){animation-duration:.34s;animation-timing-function:cubic-bezier(.3,.7,.2,1)}
+
+.scrim,.peek{display:none}
+
+/* ---------- narrow columns. Each rule answers to its own container: the menu column for the menu, the top bar for the bar ---------- */
+@container (max-width:720px){
+  .wall{--cols:3}
+  .mode{min-height:44px;padding:0 14px}
+  .mode span{display:none}
+}
+@container (max-width:620px){
+  .hero,.ctas{grid-template-columns:minmax(0,1fr)}
+  .hero{padding:16px 16px 18px}
+  .h-plate{align-items:flex-start;text-align:left}
+  .seg{order:3;flex-basis:100%}
+  .seg button{flex:1}
+}
+@container (max-width:520px){
+  .wall{--cols:2}
+  .co-plate{grid-template-columns:auto minmax(0,1fr)}
+  .co-price{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:flex-end;gap:14px}
+  .co-pay .pay,.done .pay{width:100%}
+  .done{grid-template-columns:minmax(0,1fr)}
+  .d-num h1{font-size:clamp(72px,26cqw,130px)}
+}
+@container (max-width:430px){   /* a dish keeps the full width for its words; the price and the add button take a row of their own */
+  .dish{grid-template-columns:auto minmax(0,1fr);gap:8px 12px}
+  .dish:not(.sm) .slot{width:54px;height:54px}
+  .dish .d-buy{grid-column:2;flex-direction:row;align-items:center;justify-content:space-between}
+  .brand{font-size:20px;gap:8px}
+  .glyph{width:32px;height:16px}
+  .mode{padding:0 12px;font-size:15px}
+}
+@container (max-width:300px){
+  .tile{padding:12px 12px 13px}
+  .dish .d-buy{grid-column:1/-1}
+  .glyph{display:none}
+}
+@container (max-width:240px){.wall{--cols:1}}
+@media (max-width:1000px){
+  .co{grid-template-columns:minmax(0,1fr)}
+  .co-pay{position:static;min-height:0}
+}
+/* ---------- start screen on phones and upright screens: the plate on top, the words and the buttons under it ---------- */
+@media (max-width:760px) and (min-height:521px),(max-aspect-ratio:4/5){
+  .start{grid-template:minmax(150px,1fr) auto / minmax(0,1fr)}
+  .start h1{font-size:clamp(32px,10vw,96px)}
+  .s-stage{order:-1}
+  .s-go{align-self:stretch}
+  .s-go button{flex:1;padding:0 20px}
+}
+/* ---------- phones, and any screen too short for a side panel: the page scrolls, the plate docks to the bottom edge and opens as a sheet ---------- */
+@media (max-width:760px),(max-height:520px){
+  html,body{height:auto}
+  body{overflow:auto}
+  .app{display:flex;flex-direction:column;height:auto;min-height:100vh;min-height:100dvh}
+  .bar{padding:10px 16px 6px}
+  .menu{flex:1;display:flex;flex-direction:column;overflow:visible;padding:8px 16px 24px}
+  .menu>*{width:100%}
+  .home{flex:1}
+  .lead{margin-bottom:10px}
+  .courses{position:sticky;top:0;z-index:2;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -16px 6px;padding:8px 16px;background:var(--ivory)}
+  .courses .tab{flex:none;padding:0 16px}
+  .grid2{scroll-margin-top:66px}
+  .side{order:1;position:sticky;bottom:0;z-index:5;max-height:calc(100vh - 44px);max-height:calc(100dvh - 44px);border-top:2px solid var(--mustard);border-radius:18px 18px 0 0}
+  .side.empty{display:none}
+  .side:not(.open) :is(.p-head,.stagewrap,.lines,.sum){display:none}
+  .side:not(.open) .p-mid{flex:none;overflow:visible;padding:0 12px}
+  .side:not(.open) .nudge{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;margin-top:10px;padding:8px 12px;font-size:14.5px}
+  .side:not(.open) .nudge p{flex:1 1 240px}
+  .side:not(.open) .n-btns{margin:0}
+  .side.open{animation:sheet .22s ease-out}
+  .side.open+.scrim{display:block;position:fixed;inset:0;z-index:4;background:rgba(11,31,23,.55);touch-action:none}
+  .side.open .peek,.sum.all,.sum:has(+.pay) .amt{display:none}   /* with one plate its price is the total, which the Pay button already shows */
+  .side.open .p-mid{overscroll-behavior:contain}
+  .side.open .nudge{order:1}   /* in the sheet the dishes come first, the offer after them */
+  .side .stage{--hmax:min(260px,28vh)}
+  .p-head{padding:12px 16px 0}
+  .p-head h2{order:-2;flex:1 0 calc(100% - 96px);font-size:22px}   /* the title and Close share the first row, the plate chips take the next */
+  .more-btn{display:block;order:-1}
+  .p-mid{padding:0 16px 6px}
+  .p-foot{flex-flow:row wrap;align-items:center;padding:8px 12px calc(10px + env(safe-area-inset-bottom,0px));border-top:0}   /* on the narrowest phones Pay drops to a row of its own */
+  .peek{flex:1 1 132px;display:flex;align-items:center;gap:8px;min-width:0;min-height:48px;text-align:left}
+  .peek .mini{--m:min(44px / (var(--un) * 1.2 + .4),40px / (var(--rows) * 2.4 + .4))}
+  .peek>span{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+  .peek b{font-weight:650;font-size:15px;line-height:1.2}
+  .peek .pill{font-size:12.5px}
+  .sum{flex:1 1 132px;flex-wrap:wrap;gap:2px 12px}
+  .tier{font-size:16px}
+  .amt{font-size:20px}
+  .p-foot .pay{flex:1 0 auto;width:auto;min-height:52px;padding:0 18px;font-size:18px}
+  .now{padding:10px 14px}
+  .now b{font-size:22px}
+  .now strong{font-size:26px}
+  .s-go button{min-height:64px;font-size:20px}
+}
+@keyframes sheet{from{transform:translateY(28px);opacity:.5}}
+@media (max-width:760px) and (max-height:620px){   /* a short phone with the browser's own bars showing: both start buttons stay in view */
+  .start{grid-template-rows:minmax(110px,1fr) auto;gap:14px}
+  .s-copy{gap:12px}
+  .s-sub{display:none}
+}
+@media (max-height:520px){   /* a phone on its side */
+  .side:not(.open) .n-why{display:none}
+  .start{gap:16px;padding:14px 20px}
+  .s-copy{gap:10px}
+  .start h1{font-size:clamp(28px,9vh,44px)}
+  .s-sub{display:none}
+  .s-go{align-self:stretch}
+  .s-go button{flex:1;min-height:56px;padding:0 12px}
+}
+@media (max-height:520px) and (min-width:561px){   /* its open sheet sets the plate beside the list */
+  .side.open{display:grid;grid-template:"head head" auto "plate list" minmax(0,1fr) "foot foot" auto / minmax(0,1fr) minmax(0,1.15fr)}
+  .side.open .p-head{grid-area:head}
+  .side.open .stagewrap{grid-area:plate;align-self:center}
+  .side.open .p-mid{grid-area:list}
+  .side.open .p-foot{grid-area:foot}
+  .side.open{max-height:100vh;max-height:100dvh;border-radius:0}
+  .side.open .p-head h2{flex:0 1 auto;margin-right:auto}
+  .side.open .more-btn{order:3}
+  .side.open .stage{--h:min(60cqw,100vh - 200px)}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="bar" id="bar"></header>
+  <aside class="side" id="side" aria-label="Your plate"></aside>
+  <div class="scrim" data-a="more"></div>
+  <main class="menu" id="menu"></main>
+</div>
+
+<div class="start" id="start">
+  <div class="s-copy">
+    <div class="brand"><svg class="glyph" viewBox="0 0 40 20" aria-hidden="true"><use href="#tray"/></svg><span>Umami Journeys</span></div>
+    <h1>The world on your plate</h1>
+    <p class="s-sub">Eleven countries, fifty-five dishes, and as many as you like on every plate.</p>
+    <div id="s-now"></div>
+    <div class="s-go">
+      <button class="gilt" data-a="start" data-m="in">Eat here</button>
+      <button data-a="start" data-m="out">Take away</button>
+    </div>
+  </div>
+  <div class="stagewrap s-stage"><div class="stage" id="s-tray" aria-hidden="true" style="--n:2"></div></div>
+</div>
+
+<div class="still" id="still" hidden>
+  <div role="alertdialog" aria-labelledby="still-h">
+    <h2 id="still-h">Still there?</h2>
+    <p>This order clears in <b id="still-n">15</b> seconds.</p>
+    <button class="pay gilt" data-a="awake">Keep ordering</button>
+    <button class="link" data-a="reset">Start over</button>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="tray" viewBox="0 0 40 20"><rect x=".9" y=".9" width="38.2" height="18.2" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.6" y="3.6" width="12.8" height="12.8" rx="1.6" fill="currentColor"/><rect x="19" y="3.6" width="8" height="5.6" rx="1.3" fill="currentColor"/><rect x="19" y="10.8" width="8" height="5.6" rx="1.3" fill="currentColor"/><rect x="29" y="10.8" width="8" height="5.6" rx="1.3" fill="currentColor"/><circle cx="33" cy="6.4" r="3" fill="currentColor"/></symbol></svg>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- settings ---------- */
+const DEMO = true;   // shows "mark as paid" and the order stats until a payment provider is wired in
+const RATE = {journey: .11, world: .08, trio: .07, duo: .14};   // ponytail: flat discount rates; switch to per-combo prices if margins differ by country
+const BAND = 6;      // section units in one row of a plate. A full-size plate is 4 (sandwich 2, four small sections 2). Past 6 the plate grows another row; it never turns a dish away.
+const IDLE_MS = 75000;
+const DIET = {};     // dish id -> 'veg' | 'nonveg' (egg counts as nonveg). Left empty on purpose: fill it from the kitchen's recipes, never by guessing.
+const PHOTO = {};    // dish id -> image URL or data URI. A dish without one shows its drawn token instead.
+
+const COURSES = ['sandwich', 'crispy', 'dip', 'drink', 'dessert'];
+const TRIO = ['sandwich', 'crispy', 'drink'];
+const LABEL = {sandwich: 'Sandwich', crispy: 'Side', dip: 'Dip', drink: 'Drink', dessert: 'Dessert'};
+const PLURAL = {sandwich: 'Sandwiches', crispy: 'Sides', dip: 'Dips', drink: 'Drinks', dessert: 'Desserts'};
+const TIER = {journey: 'Full Journey', world: 'World Plate', trio: 'Trio'};
+const A_TIER = {journey: 'a Full Journey', world: 'a World Plate', trio: 'a Trio'};
+
+/* ---------- menu ----------
+   Names, prices and copy come from the original file. prep is the miniature kitchen: three steps, each taken from that country's own
+   dish descriptions, as [action, ingredient colour, caption]. The last entry of each dish is its drawing:
+   two food colours taken from its ingredients, plus a shape for sides (sticks, rounds or rings). */
+const MENU = [
+ {id: 'italy', country: 'Italy', title: 'Tuscan Sunshine',
+  story: 'A stroll through an Italian countryside market — bright basil, ripe tomatoes, and nutty cheese under the Tuscan sun.',
+  prep: [['pound', '#6E9B34', 'Pounding basil and walnuts into pesto'], ['flip', '#C9A23A', 'Frying zucchini fritters'], ['pour', '#5A3420', 'Soaking tiramisu layers in espresso']],
+  items: {sandwich: ['it1', 'The Tuscan Sun', 350, 'Roasted red peppers, sun-dried tomato tapenade, basil-walnut pesto, and melted provolone on toasted sourdough.', '#C8402B #5E8C31'],
+          dip: ['it2', 'Fresh Basil-Walnut Pesto', 120, 'Vibrant, aromatic, and nutty.', '#6E9B34 #C9D98A'],
+          crispy: ['it3', 'Zucchini Fritters', 180, 'With cool tzatziki dip.', '#C9A23A #5E8C31 rounds'],
+          drink: ['it4', 'Iced Lemon-Rosemary Tea', 140, 'Light, fragrant, and refreshing.', '#D9A441 #F4E38A'],
+          dessert: ['it5', 'Mini Tiramisu Cup', 100, 'Espresso-soaked layers with mascarpone cream.', '#EAD9B8 #5A3420']}},
+ {id: 'japan', country: 'Japan', title: 'Tokyo Glow',
+  story: 'Neon-lit streets, quiet tea houses, and the perfect harmony of umami, sweetness, and comfort.',
+  prep: [['stir', '#8DB255', 'Whisking matcha'], ['flip', '#6B4226', 'Glazing shiitake with miso'], ['roll', '#A6C36F', 'Shaping matcha mochi']],
+  items: {sandwich: ['jp1', 'The Tokyo Melt', 380, 'Miso-glazed shiitake mushrooms, caramelized onions, pickled ginger, and Gruyère with Japanese mayo.', '#6B4226 #C98B3A'],
+          dip: ['jp2', 'Wasabi Mayo', 100, 'A silky heat to wake up the palate.', '#CFE3A1 #8DB255'],
+          crispy: ['jp3', 'Sweet Potato Fries', 160, 'Naturally sweet, golden, and crisp.', '#E0782A #C45F1C sticks'],
+          drink: ['jp4', 'Hot Matcha Latte', 180, 'Velvety, grassy green tea warmth.', '#8DB255 #EAF2D3'],
+          dessert: ['jp5', 'Matcha Mochi', 110, 'Soft rice cake with subtle green tea sweetness.', '#F2F0E6 #A6C36F']}},
+ {id: 'mexico', country: 'Mexico', title: 'Mexicali Fiesta',
+  story: 'A lively street festival — smoky grills, zesty salsas, and bursts of color and spice.',
+  prep: [['chop', '#7FA03A', 'Dicing avocado'], ['flip', '#C4572B', 'Searing chipotle paneer'], ['pour', '#C98A3C', 'Dusting churros with cinnamon sugar']],
+  items: {sandwich: ['mx1', 'The Mexicali Fire', 360, 'Chipotle-marinated paneer, black bean–corn salsa, avocado, feta, and cilantro-lime aioli.', '#C4572B #7FA03A'],
+          dip: ['mx2', 'Chipotle-Cilantro Crema', 110, 'Smoky with a fresh herbal lift.', '#E9A178 #6E9B34'],
+          crispy: ['mx3', 'Cheese-Stuffed Jalapeño Poppers', 190, 'Spicy, cheesy indulgence.', '#D6A23C #4E8B2B rounds'],
+          drink: ['mx4', 'Iced Hibiscus Agua Fresca', 150, 'Tart, floral, and cooling.', '#B5123E #F28FA6'],
+          dessert: ['mx5', 'Mini Churros', 100, 'Dusted with cinnamon sugar and served with chocolate dip.', '#C98A3C #4A2A1A']}},
+ {id: 'korea', country: 'Korea', title: 'Seoul Street',
+  story: 'The buzz of a Korean night market — sizzling, spicy, and comforting with a playful crunch.',
+  prep: [['flip', '#C2331F', 'Glazing crispy tofu with gochujang'], ['chop', '#F08A24', 'Slicing carrots to pickle'], ['pour', '#9A5B25', 'Pouring roasted barley tea']],
+  items: {sandwich: ['kr1', 'The Seoulful Bite', 340, 'Gochujang-glazed crispy tofu, pickled carrots, kimchi, and creamy gochujang-sesame spread.', '#C2331F #F08A24'],
+          dip: ['kr2', 'Gochujang-Sesame Aioli', 120, 'Spicy and nutty richness.', '#D9603B #F3E2B3'],
+          crispy: ['kr3', 'Crispy Okra Fries', 170, 'Light, earthy crunch.', '#8DA63A #C9A23A sticks'],
+          drink: ['kr4', 'Hot Roasted Barley Tea', 140, 'Nutty and toasty.', '#9A5B25 #C98A4A'],
+          dessert: ['kr5', 'Honey Hotteok', 120, 'Warm pancake with a molten sugar-honey filling.', '#D49A3A #8A4A1C']}},
+ {id: 'india', country: 'India', title: 'Mumbai Masala Legend',
+  story: 'The nostalgia of a Mumbai street corner — tangy chutneys, spicy potatoes, and endless chatter over chai.',
+  prep: [['pound', '#4E9A3A', 'Grinding mint and coriander chutney'], ['flip', '#E5B347', 'Tossing fries in chaat masala'], ['pour', '#B98556', 'Pouring masala chai']],
+  items: {sandwich: ['in1', 'The Bombay Bomb', 320, 'Spiced potato mash, beetroot, cucumber, tomato, onion, mint-coriander chutney, tamarind chutney, grilled to perfection.', '#E3B23C #A3154E'],
+          dip: ['in2', 'Mint-Coriander Chutney', 90, 'Bright and refreshing.', '#4E9A3A #9BCB6B'],
+          crispy: ['in3', 'Masala Fries', 150, 'Tossed in house chaat masala.', '#E5B347 #D2772B sticks'],
+          drink: ['in4', 'Hot Masala Chai', 180, 'Spiced and aromatic.', '#B98556 #E7CDA8'],
+          dessert: ['in5', 'Mini Gulab Jamun Bowl', 100, 'Soft, syrupy indulgence.', '#E2A23B #7A2E12']}},
+ {id: 'usa', country: 'USA', title: 'Smoky Southern BBQ',
+  story: 'Backyard smoke pits, the smell of hickory wood, and sweet tea under the porch light.',
+  prep: [['stir', '#7A2F16', 'Stirring jackfruit into BBQ sauce'], ['flip', '#EBCB7A', 'Frying cassava fries'], ['pour', '#B5651D', 'Pouring iced sweet tea']],
+  items: {sandwich: ['us1', 'The Smoky Mountain', 400, 'Pulled smoked jackfruit in BBQ sauce with melted cheddar and coleslaw.', '#7A2F16 #F2E9D0'],
+          dip: ['us2', 'Smoky Paprika Mayo', 110, 'Rich and barbecue-ready.', '#E58A4B #C0392B'],
+          crispy: ['us3', 'Cassava Fries', 200, 'With cilantro-lime aioli.', '#EBCB7A #D9A84A sticks'],
+          drink: ['us4', 'Iced Sweet Tea', 160, 'Classic Southern refreshment.', '#B5651D #F4E38A'],
+          dessert: ['us5', 'Pecan Pie Bite', 110, 'Buttery, nutty, and deeply satisfying.', '#C98A3C #5A3118']}},
+ {id: 'greece', country: 'Greece', title: 'Greek Island Breeze',
+  story: 'Whitewashed walls, sea breezes, and the scent of olive groves.',
+  prep: [['chop', '#7FA03A', 'Chopping cucumber for tzatziki'], ['flip', '#C9A23A', 'Frying zucchini fritters'], ['pour', '#D49A3A', 'Drizzling honey over baklava']],
+  items: {sandwich: ['gr1', 'The Aegean Sun', 370, 'Halloumi, olive tapenade, roasted peppers, tomato, tzatziki on toasted bread.', '#3F3A2A #C8402B'],
+          dip: ['gr2', 'Tzatziki', 100, 'Cool yogurt, cucumber, and garlic.', '#F3F2E8 #7FA03A'],
+          crispy: ['gr3', 'Zucchini Fritters', 180, 'Golden and crispy.', '#C9A23A #5E8C31 rounds'],
+          drink: ['gr4', 'Chilled Mint-Lemon Frappe', 170, 'Greek-style icy refreshment.', '#CFE3A1 #F4E38A'],
+          dessert: ['gr5', 'Mini Baklava', 120, 'Layers of filo pastry, honey, and nuts.', '#D49A3A #7FA03A']}},
+ {id: 'iran', country: 'Iran', title: 'Persian Silk Road',
+  story: 'Ancient spice bazaars, rose gardens, and the luxury of slow-cooked flavors.',
+  prep: [['flip', '#5B2A4A', 'Grilling eggplant'], ['pound', '#B98A7A', 'Crushing walnuts for the pomegranate cream'], ['pour', '#E0992B', 'Pouring saffron-rose tea']],
+  items: {sandwich: ['ir1', 'The Persian Jewel', 380, 'Grilled eggplant in pomegranate molasses, walnut-pomegranate spread, fresh mint, and feta.', '#5B2A4A #A3154E'],
+          dip: ['ir2', 'Walnut-Pomegranate Cream', 130, 'Rich, tangy, and nutty.', '#B98A7A #A3154E'],
+          crispy: ['ir3', 'Spiced Corn Ribs', 190, 'Sweet-spicy crunch.', '#F0C23C #D98A2B sticks'],
+          drink: ['ir4', 'Hot Saffron-Rose Tea', 150, 'Fragrant and regal.', '#E0992B #F3B7C2'],
+          dessert: ['ir5', 'Persian Love Cake', 100, 'Perfumed with rosewater and cardamom, topped with pistachios.', '#EBCB8A #E88BA0']}},
+ {id: 'thailand', country: 'Thailand', title: 'Bangkok Street Market',
+  story: 'The symphony of Thai street food — sweet, sour, spicy, and fragrant all at once.',
+  prep: [['pound', '#7FA03A', 'Pounding green curry paste'], ['chop', '#B7D94C', 'Shredding green papaya'], ['stir', '#C98B3A', 'Stirring spicy peanut sauce']],
+  items: {sandwich: ['th1', 'The Bangkok Bash', 360, 'Green curry–marinated tofu, peanut sauce, green papaya slaw, Thai basil.', '#7FA03A #C98B3A'],
+          dip: ['th2', 'Spicy Peanut Sauce', 120, 'Creamy and aromatic.', '#C98B3A #C0392B'],
+          crispy: ['th3', 'Cassava Fries', 170, 'Crispy and golden.', '#EBCB7A #D9A84A sticks'],
+          drink: ['th4', 'Thai Iced Tea', 160, 'Sweet, creamy, cooling.', '#E0782A #F6E3C8'],
+          dessert: ['th5', 'Mango Sticky Rice', 110, 'Coconut-scented rice with ripe mango.', '#F7F2E4 #F5B92E']}},
+ {id: 'ethiopia', country: 'Ethiopia', title: 'Addis Sunset',
+  story: 'The rich warmth of Ethiopian spices, coffee rituals, and a hint of sweetness at dusk.',
+  prep: [['stir', '#B5391C', 'Simmering misir wot'], ['flip', '#D9A23C', 'Frying panko onion rings'], ['pour', '#3B2012', 'Pouring spiced coffee']],
+  items: {sandwich: ['et1', 'The Addis Ababa Heat', 340, 'Spicy red lentil stew (misir wot), garlicky spinach, tahini spread.', '#B5391C #3F7A2E'],
+          dip: ['et2', 'Berbere-Spiced Yogurt', 110, 'Cooling yet warmly spiced.', '#F2D2B8 #B5391C'],
+          crispy: ['et3', 'Panko Onion Rings', 180, 'Golden and crunchy.', '#D9A23C #B4741A rings'],
+          drink: ['et4', 'Hot Ethiopian Spiced Coffee', 160, 'Bunna - traditional spiced coffee.', '#3B2012 #8A5A32'],
+          dessert: ['et5', 'Teff Flour Chocolate Brownie', 110, 'Dense, earthy, and gluten-free.', '#3E2416 #6B4226']}},
+ {id: 'brazil', country: 'Brazil', title: 'Rio Carnival',
+  story: 'Samba beats, tropical fruits, and street food bursting with life.',
+  prep: [['pound', '#2E2420', 'Mashing black beans'], ['flip', '#D9A84A', 'Toasting farofa'], ['roll', '#4A2A1A', 'Rolling brigadeiro truffles']],
+  items: {sandwich: ['br1', 'The Rio Grande', 370, 'Black bean mash, smoked cheese, tomato-onion salsa, toasted farofa crunch.', '#2E2420 #D8382B'],
+          dip: ['br2', 'Lime-Cilantro Mayo', 110, 'Zesty and tropical.', '#E6EDC2 #6E9B34'],
+          crispy: ['br3', 'Cheese-Stuffed Jalapeño Poppers', 190, 'Spicy cheese goodness.', '#D6A23C #4E8B2B rounds'],
+          drink: ['br4', 'Iced Açaí-Lime Cooler', 160, 'Energizing and fruity.', '#5B1E5E #B7D94C'],
+          dessert: ['br5', 'Brigadeiro Truffles', 110, 'Brazilian chocolate fudge balls rolled in sprinkles.', '#4A2A1A #E8C24A']}}
+];
+// ponytail: hand-picked neighbouring kitchens for "Goes with your plate"; replace with pairing or sales data when there is some
+const NEAR = {italy: ['greece', 'iran'], greece: ['italy', 'iran'], iran: ['india', 'greece'], india: ['iran', 'ethiopia'], ethiopia: ['india', 'iran'],
+  thailand: ['korea', 'japan'], korea: ['japan', 'thailand'], japan: ['korea', 'thailand'], usa: ['mexico', 'brazil'], mexico: ['brazil', 'usa'], brazil: ['mexico', 'usa']};
+const ITEM = {}, BY = {};
+for (const m of MENU) {
+  BY[m.id] = m;
+  for (const c of COURSES) { const [id, name, price, desc, art] = m.items[c]; ITEM[id] = m.items[c] = {id, name, price, desc, art: art.split(' '), course: c, home: m}; }
+}
+
+/* ---------- pricing and plate layout (pure functions, no DOM) ---------- */
+const nine = x => Math.round((x - 9) / 10) * 10 + 9;          // nearest price ending in 9
+const sum = a => a.reduce((s, x) => s + x, 0);
+const ids = (m, cs = COURSES) => cs.map(c => m.items[c].id);
+
+// A plate is a list of dish ids, any number per course. Bundle it into the best deals:
+// same-country fives, then mixed fives, then trios; whatever is left is priced singly.
+function priceOf(list) {
+  const pool = Object.fromEntries(COURSES.map(c => [c, list.map(id => ITEM[id]).filter(i => i.course === c)]));
+  const sets = [], dear = c => pool[c].reduce((b, x, i, a) => x.price > a[b].price ? i : b, 0);
+  const take = (cs, tier, pick) => sets.push({tier, items: cs.map(c => pool[c].splice(pick(c), 1)[0])});
+  for (const m of MENU) while (COURSES.every(c => pool[c].some(i => i.home === m))) take(COURSES, 'journey', c => pool[c].findIndex(i => i.home === m));
+  while (COURSES.every(c => pool[c].length)) take(COURSES, 'world', dear);
+  while (TRIO.every(c => pool[c].length)) take(TRIO, 'trio', dear);
+  for (const s of sets) { s.list = sum(s.items.map(i => i.price)); s.price = nine(s.list * (1 - RATE[s.tier])); }
+  const loose = COURSES.flatMap(c => pool[c]), rest = sum(loose.map(i => i.price));
+  const full = sum(sets.map(s => s.list)) + rest, price = sum(sets.map(s => s.price)) + rest;
+  return {sets, loose, list: full, price, save: full - price, n: list.length};
+}
+function totals(plates = S.plates) {
+  const ps = plates.map(pl => priceOf(pl.items)).filter(x => x.n);
+  const js = ps.flatMap(x => x.sets).filter(s => s.tier === 'journey').sort((a, b) => b.list - a.list);
+  let duo = 0;   // every pair of Full Journeys in the order is priced as a Duo
+  for (let i = 0; i + 1 < js.length; i += 2) duo += Math.max(0, js[i].price + js[i + 1].price - nine((js[i].list + js[i + 1].list) * (1 - RATE.duo)));
+  const list = sum(ps.map(x => x.list)), price = sum(ps.map(x => x.price)) - duo;
+  return {list, price, duo, save: list - price, plates: ps.length, items: sum(ps.map(x => x.n))};
+}
+for (const m of MENU) { m.full = priceOf(ids(m)); m.trio = priceOf(ids(m, TRIO)); }
+const label = pr => {
+  const parts = Object.keys(TIER).map(t => [t, pr.sets.filter(s => s.tier === t).length]).filter(x => x[1]).map(([t, n]) => n > 1 ? `${n} ${TIER[t]}s` : TIER[t]);
+  return parts.length ? parts.join(' + ') + (pr.loose.length ? ` + ${pr.loose.length} more` : '') : pr.n === 1 ? '1 dish' : pr.n + ' dishes';
+};
+
+// The part of a plate that is not yet a five-course set, one dish per course. Suggestions and empty sections come from it.
+function open(list) {
+  const b = priceOf(list), p = {};
+  [...(b.sets.filter(s => s.tier === 'trio').pop()?.items || []), ...b.loose].forEach(i => { p[i.course] = i.id; });
+  return p;
+}
+const homeOf = p => (ITEM[p.sandwich] || ITEM[Object.values(p)[0]])?.home;
+const suggest = (p, c) => homeOf(p)?.items[c];
+
+// Plate sections in plate order: sandwiches (large squares), then sides, dips, drinks, desserts (small ones, two to a column).
+// Ghost courses become dashed prompts. Columns fill rows of BAND units; the plate grows as many rows as the order needs.
+function sections(list, ghost = []) {
+  const cells = [], cols = [], rows = [[]];
+  for (const c of COURSES) {
+    list.forEach((id, k) => { if (ITEM[id].course === c) cells.push({c, it: ITEM[id], k}); });
+    if (ghost.includes(c)) cells.push({c});
+  }
+  const sm = cells.filter(x => x.c !== 'sandwich');
+  if (sm.length % 2) sm[sm.length - 1].tall = 1;
+  cells.forEach(x => { if (x.c === 'sandwich') cols.push({u: 2, cells: [x]}); });
+  for (let i = 0; i < sm.length; i += 2) cols.push({u: 1, cells: sm.slice(i, i + 2)});
+  let used = 0, un = 1;
+  for (const col of cols) {
+    if (used + col.u > BAND) { rows.push([]); used = 0; }
+    rows[rows.length - 1].push(...col.cells); used += col.u; un = Math.max(un, used);
+  }
+  return {rows, un};
+}
+function ghostsOf(list) {
+  if (!list.length) return COURSES;
+  const p = open(list);
+  return Object.keys(p).length ? COURSES.filter(c => !p[c]) : [];
+}
+
+// The one in-flow suggestion: the cheapest step up to the next deal for this plate.
+function nudge(pl) {
+  const p = open(pl.items), n = Object.keys(p).length;
+  if (pl.quiet || !n) return null;
+  const miss = COURSES.filter(c => !p[c]);
+  const want = n === 4 ? miss : !p.sandwich ? [] : TRIO.every(c => p[c]) ? miss : miss.filter(c => TRIO.includes(c));
+  const add = want.map(c => suggest(p, c)), after = [...pl.items, ...add.map(i => i.id)];
+  if (!add.length) return null;
+  const then = priceOf(after), tier = then.sets.find(s => s.items.includes(add[0]))?.tier;
+  return tier ? {add, tier, cost: then.price - priceOf(pl.items).price, worth: sum(add.map(i => i.price))} : null;
+}
+
+/* ---------- state ---------- */
+const init = no => ({started: false, mode: 'in', view: 'home', cid: null, course: 'sandwich', plates: [{items: []}], at: 0,
+  pay: 'upi', b: true, open: false, no, t0: 0, taps: 0, shown: [], taken: 0, receipt: null});
+let S = init(41), fresh = new Set(), rolled = {}, shown = '', hold = 0, cycle, idleT, stillT, autoT;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const inr = n => '₹' + n.toLocaleString('en-IN');
+const GLYPH = '<svg class="glyph" viewBox="0 0 40 20" aria-hidden="true"><use href="#tray"/></svg>';
+const seen = k => { if (!S.shown.includes(k)) S.shown.push(k); };
+const live = () => S.plates.map((pl, i) => ({pl, i, pr: priceOf(pl.items)})).filter(x => x.pr.n);
+
+// Single dishes always go on the active plate, which grows a section for each. A combo (own) takes a plate of its own
+// unless the active plate is empty, so combos stack. Neither plates nor sections are capped.
+function add(list, own) {
+  let i = S.at;
+  if (own && S.plates[i].items.length) { i = S.plates.findIndex(pl => !pl.items.length); if (i < 0) i = S.plates.push({items: []}) - 1; }
+  const at = S.plates[i].items.length;
+  S.plates[i].items.push(...list);
+  S.at = i;
+  fresh = new Set(list.map((_, j) => at + j));
+  render();
+}
+function submitOrder(order) { console.log('order', order); }   // the one hand-off point: send the order to the kitchen printer or backend here
+
+/* ---------- drawing: food tokens and the plate ---------- */
+const STEAM = '<span class="steam up" style="--z:12"><i style="--k:0"></i><i style="--k:1"></i><i style="--k:2"></i></span>';
+const STICKS = [[14, 0, 0], [-30, 6, 60], [62, -5, -80], [-6, 8, -30], [38, -8, 90], [-52, 3, 140], [24, -3, -150], [80, 0, 40]];
+const SPOTS = [[6, 6], [46, 2], [27, 30], [56, 40], [4, 50], [34, 58]];
+function token(it, o = {}) {
+  const [a, b, shape] = it.art;
+  const L = (z, f, x = '', c = '') => `<i${c ? ` class="${c}"` : ''} style="--z:${z};--f:${f || 'none'};${x}"></i>`;
+  const body = {
+    sandwich: () => L(.3, '', 'border-radius:30%', 'sh') + L(1, '#9C5F22') + L(2, '#B8742A') + L(3, '#D9A04C')
+      + L(4, '#5DA130', 'inset:-6%;border-radius:32%;rotate:9deg') + L(4.5, '#86C64A', 'inset:-5%;border-radius:36%;rotate:-14deg')
+      + L(5, '#D8382B', 'inset:-1%;border-radius:38%;rotate:4deg') + L(6, a, 'inset:1%') + L(7, b, 'inset:4%;rotate:-3deg')
+      + L(8, '#FFC93C', 'rotate:45deg;scale:.84;border-radius:10%') + L(9, '#B8742A', '', 'bun') + L(10, '#D9A04C', '', 'bun') + L(11, '', '', 'top bun')
+      + `<span class="pick up" style="--z:11"><b>${esc(it.home.country)}</b></span>` + STEAM,
+    crispy: () => L(.3, '', '', 'sh') + L(1, '#D8CDBB') + L(2, '#EFE6D4') + L(3, '#F8F1E3')
+      + (shape === 'sticks' ? STICKS.map(([r, x, y], k) => L(k + 4, k % 3 ? a : b, `rotate:${r}deg;translate:${x}% ${y}%`, 'st')).join('')
+        : SPOTS.map(([x, y], k) => L(k + 4, a, `--g:${b};left:${x}%;top:${y}%`, shape === 'rings' ? 'rg' : 'rd')).join('')),
+    dip: () => L(.3, '', '', 'sh') + L(1, '#D9D0C0', 'scale:.84') + L(2, '#EFE8DB', 'scale:.92') + L(3, '#FFFDF9', 'scale:.98') + L(4, '#FFFDF9') + L(5, a, `--g:${b}`, 'top'),
+    dessert: () => L(.3, '', '', 'sh') + L(1, '#E6DDCF', 'inset:-12%') + L(1.5, '', 'inset:-12%', 'sc') + L(2, a) + L(3, a, 'scale:.96') + L(4, a, 'scale:.9')
+      + L(5, b, 'scale:.74') + L(6, b, 'scale:.58') + L(7, a, 'scale:.24'),
+    drink: () => L(.3, '', '', 'sh') + (/^Hot/.test(it.name)
+      ? [1, 2, 3, 4, 5, 6, 7].map(z => L(z, '#FFFDF9', `scale:${(.78 + z * .03).toFixed(2)}`)).join('') + L(8, a, `--g:${b}`, 'hot') + STEAM
+      : Array.from({length: 12}, (_, k) => L(k + 1, k < 9 ? a : '#F4F1EA', `scale:${(.76 + (k + 1) * .02).toFixed(2)}`)).join('') + L(13, a, `--g:${b}`, 'iced') + '<span class="straw up" style="--z:13"></span>')
+  }[it.course]();
+  return `<span class="tok t-${it.course}${o.flat ? ' flat' : ''}${o.fresh ? ' fresh' : ''}" style="--dl:${o.delay || 0}ms">${body}</span>`;
+}
+const shape = x => `${x.c === 'sandwich' ? ' big' : ''}${x.tall ? ' tall' : ''}${x.c === 'drink' ? ' cup' : ''}`;
+function tray(list, o = {}) {
+  const edge = [1, 2, 3, 4].map(i => `<b style="--i:${i}"></b>`).join(''), {rows, un} = sections(list, o.ghost), fr = o.fresh, n = o.under || 0;
+  const sc = Math.min(1, 1 / (.235 * un + .06), rows.length > 1 ? .6625 / (.06 + .47 * rows.length) : 1);   // shrink to fit the stage, never crop
+  let d = 0;
+  const well = x => x.it
+    ? `<div class="well${shape(x)}">${token(x.it, {fresh: fr?.has(x.k), delay: fr?.size > 1 && fr.has(x.k) ? d++ * 110 : 0})}</div>`
+    : `<div class="well${shape(x)} empty" data-a="well" data-c="${x.c}"><span class="tag up">${LABEL[x.c]}</span></div>`;
+  const unders = Array.from({length: n}, (_, k) => `<div class="slab under" style="--d:${n - k};--j:${[1.6, -1.3, .9, -1.9][(n - k - 1) % 4]}">${edge}</div>`).join('');
+  return `<div class="rig${sc < .6 ? ' far' : ''}" style="--un:${un};--rows:${rows.length};--sc:${sc.toFixed(3)}"><div class="bob${fr?.size ? ' dip' : ''}${fr?.size > 1 ? ' sweep' : ''}">${unders}<div class="slab">${edge}<span class="shine"></span>${rows.map(r => `<div class="band">${r.map(well).join('')}</div>`).join('')}</div></div></div>`;
+}
+// A flat top-down plate. It carries its own width and rows so a caller can size it to a box; fr marks dishes that were just added, which pop in.
+const mini = (list, fr) => { const {rows, un} = sections(list, list.length ? [] : COURSES);   // an empty plate shows its five empty sections
+  return `<span class="mini" aria-hidden="true" style="--un:${un};--rows:${rows.length}">${rows.map(r => `<span class="band">${r.map(x => `<span class="cell${shape(x)}${fr?.has(x.k) ? ' fresh' : ''}">${x.it ? token(x.it, {flat: 1}) : ''}</span>`).join('')}</span>`).join('')}</span>`; };
+// A miniature chef at work. One neutral figure for every country: the technique, the vessel and the ingredient colour carry the cuisine.
+function chef(act, col, text) {
+  const tool = {
+    pound: `<path class="k-ves" d="M47 49h18a9 9 0 0 1-18 0z"/><ellipse cx="56" cy="49" rx="8" ry="2.2" fill="${col}"/><g class="k-arm"><path class="k-limb" d="M38 37 54 39"/><rect class="k-tool" x="52.5" y="25" width="4.5" height="21" rx="2.2"/></g>`,
+    stir: `<rect class="k-ves" x="46" y="46" width="21" height="14" rx="3"/><ellipse cx="56.5" cy="47" rx="9" ry="2.4" fill="${col}"/><g class="k-arm"><path class="k-limb" d="M38 37 52 34"/><path class="k-line" d="M52 34 57 48"/></g>`,
+    chop: `<rect class="k-ves" x="44" y="56" width="27" height="4" rx="2"/><circle cx="62.5" cy="53" r="3" fill="${col}"/><circle cx="67" cy="53.6" r="2.4" fill="${col}"/><rect x="50" y="51" width="7" height="5" rx="1.5" fill="${col}"/><g class="k-arm"><path class="k-limb" d="M38 37 50 40"/><path class="k-tool" d="M49 38h13l-2 9h-11z"/></g>`,
+    flip: `<g class="k-arm"><path class="k-limb" d="M38 37 48 46"/><path class="k-line" d="M48 46h8"/><path class="k-ves" d="M55 44h17a8.5 5 0 0 1-17 0z"/></g><ellipse class="k-toss" cx="63.5" cy="42" rx="5" ry="2.6" fill="${col}"/>`,
+    pour: `<path class="k-ves" d="M57.5 51h10l-1.2 9h-7.6z"/><g class="k-arm"><path class="k-limb" d="M38 37 49 36"/><path class="k-ves" d="M48 28h11l3.5 4-3.5 1v9h-11z"/></g><path class="k-flow" d="M62.5 34v17" stroke="${col}"/>`,
+    roll: `<rect class="k-ves" x="44" y="56" width="27" height="4" rx="2"/><g class="k-arm"><path class="k-limb" d="M38 37 53 45"/></g><g class="k-arm two"><path class="k-limb" d="M38 40 59 53"/></g><circle class="k-ball" cx="56" cy="50" r="5" fill="${col}"/>`
+  }[act];
+  return `<figure class="chef k-${act}"><svg viewBox="0 0 80 66" aria-hidden="true"><rect class="k-top" x="6" y="60" width="68" height="4" rx="2"/>
+    <path class="k-body" d="M18 60V44a12 12 0 0 1 24 0v16z"/><rect class="k-apron" x="24" y="42" width="12" height="18" rx="3"/><circle class="k-body" cx="30" cy="24" r="7.5"/>
+    <path class="k-hat" d="M23 18v-5a7 6.5 0 0 1 14 0v5z"/>${tool}</svg><figcaption>${text}</figcaption></figure>`;
+}
+const mark = it => DIET[it.id] ? `<span class="diet ${DIET[it.id]}" role="img" aria-label="${DIET[it.id] === 'veg' ? 'Vegetarian' : 'Non-vegetarian'}"></span>` : '';
+
+/* ---------- views ---------- */
+function bar() {
+  const brand = `<button class="brand" data-a="home">${GLYPH}<span>Umami Journeys</span></button>`;
+  if (S.view === 'done') return brand;
+  if (S.view === 'checkout') return brand + '<button class="back" data-a="home">Back to the menu</button>';
+  return brand + `<nav class="seg" aria-label="Browse"><button data-a="home" aria-pressed="${S.view !== 'dishes'}">Journeys</button><button data-a="dishes" aria-pressed="${S.view === 'dishes'}">All dishes</button></nav>
+    <button class="mode" data-a="mode" aria-label="${S.mode === 'in' ? 'Eating here. Change to take away' : 'Taking away. Change to eating here'}"><b>${S.mode === 'in' ? 'Eating here' : 'Taking away'}</b><span>Change</span></button>`;
+}
+const slot = it => `<span class="slot">${PHOTO[it.id] ? `<img src="${esc(PHOTO[it.id])}" alt="">` : token(it, {flat: 1})}</span>`;
+const onPlate = id => S.plates[S.at].items.filter(x => x === id).length;
+// Dishes that are not on the plate yet come first, dearest first. The ones already on it drop to the end of the list.
+const ranked = list => [...list].sort((a, b) => !!onPlate(a.id) - !!onPlate(b.id) || b.price - a.price);   // a.price - b.price would put the cheapest first
+function dish(it, chip, sm) {
+  const n = onPlate(it.id);
+  return `<article class="dish${sm ? ' sm' : ''}${n ? ' on' : ''}" data-d="${it.id}">
+    ${slot(it)}
+    <div><h3>${mark(it)}${esc(it.name)}</h3><p><span class="chip">${chip}</span>${esc(it.desc)}${n ? ` <span class="pill mine">${n > 1 ? n + ' on your plate' : 'On your plate'}</span>` : ''}</p></div>
+    <div class="d-buy"><b class="price">${inr(it.price)}</b><button class="add" data-a="add" data-id="${it.id}" aria-label="Add ${esc(it.name)}">${sm ? '+' : 'Add'}</button></div></article>`;
+}
+// Up to three related dishes that are not on the plate: first what finishes the plate's own country, then extras from neighbouring kitchens.
+function related(pl) {
+  const list = pl.items, out = [];
+  if (!list.length) return out;
+  const p = open(list), home = homeOf(p) || ITEM[list.find(id => ITEM[id].course === 'sandwich') || list[0]].home;
+  const skip = new Set([...list, ...(nudge(pl)?.add || []).map(i => i.id)].map(id => ITEM[id].name));
+  const push = it => { if (out.length < 3 && !skip.has(it.name)) { skip.add(it.name); out.push(it); } };
+  if (Object.keys(p).length) COURSES.forEach(c => { if (!p[c]) push(home.items[c]); });
+  for (const n of NEAR[home.id]) for (const c of ['dip', 'dessert', 'crispy', 'drink']) push(BY[n].items[c]);
+  const now = priceOf(list).price;
+  return out.map(it => { const cost = priceOf([...list, it.id]).price - now; return {it, cost, save: it.price - cost}; });
+}
+function upsell() {
+  const r = related(S.plates[S.at]);
+  if (!r.length) return '';
+  seen('R');
+  return `<div class="rel-box"><h2>Goes with your plate</h2><div class="rels">${r.map(x => `<button class="rel" data-a="add" data-id="${x.it.id}" data-rel="1" aria-label="Add ${esc(x.it.name)} for ${inr(x.cost)}">
+    ${slot(x.it)}<span class="r-t"><b>${esc(x.it.name)}</b><i>${LABEL[x.it.course]} from ${x.it.home.country}</i></span>
+    <span class="r-buy"><span class="pill">+ ${inr(x.cost)}</span>${x.save > 0 ? `<em class="pill hot">save ${inr(x.save)}</em>` : ''}</span></button>`).join('')}</div></div>`;
+}
+const VIEW = {
+  home: () => `<section class="home"><div class="lead"><h1>Choose a journey</h1><p>Five courses from one country on one plate, for about ${Math.round(RATE.journey * 100)}% less than ordering them one by one.</p></div>${upsell()}
+    <div class="wall">${MENU.map(m => `<button class="tile" data-a="go" data-id="${m.id}"${m.id === S.cid ? ' style="view-transition-name:hero"' : ''}>
+      <span class="t-top">${mini(ids(m))}<span class="t-country">${m.country}</span></span><span class="t-title">${esc(m.title)}</span>
+      <span class="t-price"><b>${inr(m.full.price)}</b><em class="pill hot">save ${inr(m.full.save)}</em></span></button>`).join('')}
+    <button class="tile lucky gilt" data-a="lucky"><span class="t-country">Can't decide?</span><span class="t-title">Surprise me</span><span class="t-price">We pick a journey and fill your plate.</span></button></div></section>`,
+
+  country: () => { const m = BY[S.cid];
+    return `<section class="country"><button class="back" data-a="home">All journeys</button>
+      <div class="hero"><div class="h-copy"><p class="c-country">${m.country}</p><h1 class="c-title">${esc(m.title)}</h1><p class="c-story">${esc(m.story)}</p></div>
+        <div class="h-plate"><div class="kitchen">${m.prep.map(x => chef(...x)).join('')}</div>${mini(ids(m))}<p>${COURSES.map(c => esc(m.items[c].name)).join(', ')}</p></div>
+        <div class="ctas"><button class="cta gilt" data-a="journey" data-id="${m.id}"><span>Add the Full Journey</span><b>${inr(m.full.price)}</b><em class="pill hot">save ${inr(m.full.save)}</em><small>All five courses on one plate</small></button>
+        <button class="cta alt" data-a="trio" data-id="${m.id}"><span>Add the Trio</span><b>${inr(m.trio.price)}</b><em class="pill hot">save ${inr(m.trio.save)}</em><small>Sandwich, side and drink</small></button></div></div>
+      ${upsell()}
+      <div class="rows"><h2>Or pick single dishes</h2><div class="singles">${ranked(COURSES.map(c => m.items[c])).map(it => dish(it, LABEL[it.course], 1)).join('')}</div></div></section>`; },
+
+  dishes: () => `<section><div class="lead"><h1>All dishes</h1><p>Mix countries and add as many of each as you like. Every five courses on a plate become a World Plate, about ${Math.round(RATE.world * 100)}% less.</p></div>${upsell()}
+    <div class="tabs courses" role="tablist">${COURSES.map(c => `<button class="tab" role="tab" data-a="course" data-c="${c}" aria-selected="${c === S.course}">${PLURAL[c]}</button>`).join('')}</div>
+    <div class="grid2">${ranked(MENU.map(m => m.items[S.course])).map(it => dish(it, it.home.country)).join('')}</div></section>`,
+
+  checkout: () => { const t = totals(), B = beforePay(), M = {upi: 'UPI', card: 'Card', counter: 'At the counter'};
+    if (B.length) seen('B');
+    const demo = `<button class="pay gilt" data-a="paid">Demo: mark as paid</button><p class="hint">No payment provider is connected yet, so nothing is charged.</p>`;
+    const panel = {
+      upi: `<div class="qr"><span>The UPI QR for ${inr(t.price)} shows here</span></div><p>Scan it with any UPI app. This screen moves on when the payment arrives.</p>${DEMO ? demo : ''}`,
+      card: `<p>Tap or insert your card on the reader next to this screen.</p>${DEMO ? demo : ''}`,
+      counter: `<p>Place the order now, then pay at the counter with your order number.</p><button class="pay gilt" data-a="paid">Place order</button>`
+    }[S.pay];
+    return `<section class="co"><div class="co-order"><h1>Your order</h1>
+      ${live().map((x, k) => `<article class="co-plate">${mini(x.pl.items)}
+        <div class="co-items"><h3>Plate ${k + 1}${x.pr.sets.length ? `<span class="pill on">${label(x.pr)}</span>` : ''}</h3><p>${x.pl.items.map(id => esc(ITEM[id].name)).join(', ')}</p></div>
+        <div class="co-price"><b>${inr(x.pr.price)}</b>${x.pr.save ? `<small class="pill hot">save ${inr(x.pr.save)}</small>` : ''}<button class="link" data-a="drop" data-i="${x.i}">Remove plate</button></div></article>`).join('')}
+      ${t.duo ? `<p class="duo"><span>Duo saving for two Full Journeys</span><b class="pill hot">−${inr(t.duo)}</b></p>` : ''}
+      ${B.length ? `<div class="pb"><h2>Before you pay</h2>${B.map(s => `<div class="pb-row"><p>${s.text}</p><button class="n-go" data-a="extra" data-i="${s.i}" data-ids="${s.ids}">${s.btn}</button></div>`).join('')}<button class="n-no" data-a="nob">No thanks</button></div>` : ''}
+      </div><aside class="co-pay"><p class="hint">${S.mode === 'in' ? 'Eating here' : 'Taking away'}, ${t.items} ${t.items === 1 ? 'dish' : 'dishes'} on ${t.plates} ${t.plates === 1 ? 'plate' : 'plates'}</p>
+      <h2>Pay <span>${inr(t.price)}</span></h2>${t.save ? `<span class="pill hot">You save ${inr(t.save)} on this order</span>` : ''}
+      <div class="tabs" role="tablist">${Object.keys(M).map(k => `<button class="tab" role="tab" data-a="method" data-m="${k}" aria-selected="${S.pay === k}">${M[k]}</button>`).join('')}</div>${panel}</aside></section>`; },
+
+  done: () => { const r = S.receipt;
+    return `<section class="done"><div class="d-num"><p class="d-k">Your order number</p><h1>${String(r.no).padStart(3, '0')}</h1></div>
+      <div class="d-copy"><p class="d-l">${r.pay === 'counter' ? `Pay ${inr(r.total)} at the counter.` : DEMO ? `Demo payment of ${inr(r.total)}. Nothing was charged.` : `Paid ${inr(r.total)}.`} We'll call your number when ${r.mode === 'in' ? 'your plates are ready' : 'your order is packed'}.</p>
+      <button class="pay gilt" data-a="reset">Start a new order</button><p class="hint">A new order starts in <b id="auto">20</b> seconds.</p>
+      ${DEMO ? `<p class="hint">Demo stats: ${r.taps} taps and ${r.secs} seconds from start to order, ${r.shown} suggestions shown, ${r.taken} accepted.</p>` : ''}</div></section>`; }
+};
+
+// The one pre-pay suggestion card: at most two lines, shown once, never blocking. Each line adds dishes to plate i (-1 starts a new plate).
+function beforePay() {
+  if (!S.b) return [];
+  const out = [], rows = live(), js = rows.flatMap(x => x.pr.sets).filter(s => s.tier === 'journey');
+  if (js.length % 2) {
+    const list = js[js.length - 1].items.map(i => i.id), cost = totals([...S.plates, {items: list}]).price - totals().price;
+    out.push({i: -1, ids: list, btn: `Add for ${inr(cost)}`, text: `Ordering for two? A second ${esc(js[js.length - 1].items[0].home.title)} plate is ${inr(cost)} with the Duo saving, not ${inr(js[js.length - 1].price)}.`});
+  }
+  for (const c of ['drink', 'dessert']) {
+    const x = rows.find(r => { const p = open(r.pl.items); return p.sandwich && !p[c]; });
+    if (!x) continue;
+    const it = suggest(open(x.pl.items), c), cost = priceOf([...x.pl.items, it.id]).price - x.pr.price;
+    out.push({i: x.i, ids: [it.id], btn: `Add for ${inr(cost)}`, text: `No ${LABEL[c].toLowerCase()} with the sandwich on plate ${rows.indexOf(x) + 1} yet. ${esc(it.name)} goes with it.`});
+  }
+  return out.slice(0, 2);
+}
+
+function side() {
+  const pl = S.plates[S.at], pr = priceOf(pl.items), t = totals(), n = nudge(pl), gh = ghostsOf(pl.items);
+  if (n) seen('A' + S.at + n.add.map(i => i.id).join(''));
+  const chips = S.plates.length > 1 || pr.n ? S.plates.map((x, i) => `<button class="pchip" data-a="plate" data-i="${i}" aria-pressed="${i === S.at}">Plate ${i + 1}</button>`).join('')
+    + (pr.n ? '<button class="pchip new" data-a="newplate" aria-label="New plate">+</button>' : '') : '';
+  const lines = COURSES.map(c => pl.items.map((id, k) => ITEM[id].course !== c ? '' : `<li class="line"><span class="l-n">${mark(ITEM[id])}${esc(ITEM[id].name)}<small>${LABEL[c]} from ${ITEM[id].home.country}</small></span><b>${inr(ITEM[id].price)}</b><button class="x" data-a="remove" data-k="${k}" aria-label="Remove ${esc(ITEM[id].name)}"></button></li>`).join('')).join('');
+  const names = n && n.add.map(i => esc(i.name)).join(' and ');
+  return `<div class="p-head"><h2>Your plate</h2>${chips}<button class="pchip more-btn" data-a="more">Close</button></div>
+    <div class="stagewrap"><div class="stage" aria-hidden="true" style="--n:${Math.min(S.plates.length - 1, 8)};--x:${sections(pl.items, gh).rows.length > 1 ? 1 : 0}">${tray(pl.items, {under: S.plates.length - 1, fresh, ghost: gh})}</div></div>
+    <div class="p-mid">
+      ${n ? `<div class="nudge hot"><p><strong>Add ${names} for ${inr(n.cost)}.</strong><span class="n-why"> That makes ${A_TIER[n.tier]}, ${inr(n.worth - n.cost)} less than adding ${n.add.length > 1 ? 'them' : 'it'} separately.</span></p>
+        <div class="n-btns"><button class="n-go" data-a="nudge">Add for ${inr(n.cost)}</button><button class="n-no" data-a="quiet">No thanks</button></div></div>` : ''}
+      <ul class="lines">${lines}</ul>
+    </div>
+    <div class="p-foot">${t.items ? `<button class="peek" data-a="more" aria-expanded="false" aria-label="Show your plate, ${t.items} ${t.items === 1 ? 'dish' : 'dishes'}">${mini(pl.items, fresh)}<span><b>${t.items} ${t.items === 1 ? 'dish' : 'dishes'}${t.plates > 1 ? `, ${t.plates} plates` : ''}</b>${t.save ? `<em class="pill hot">save ${inr(t.save)}</em>` : ''}</span></button>
+      <div class="sum" aria-live="polite"><div><span class="tier">${pr.n ? label(pr) : 'Empty plate'}</span>${pr.save ? `<span class="pill hot">You save ${inr(pr.save)}</span>` : ''}</div><b class="amt" data-roll="plate" data-v="${pr.price}">${inr(pr.price)}</b></div>
+      ${t.plates > 1 ? `<div class="sum all"><div><span class="tier">All ${t.plates} plates</span>${t.duo ? `<span class="pill hot">Includes ${inr(t.duo)} Duo saving</span>` : ''}</div><b class="amt">${inr(t.price)}</b></div>` : ''}
+      <button class="pay gilt" data-a="checkout">Pay <span data-roll="total" data-v="${t.price}">${inr(t.price)}</span></button>`
+      : '<p class="hint">Your plate is empty. Pick a journey to fill it in one tap, or add single dishes. The plate grows a section for every dish, as many as you like.</p>'}</div>`;
+}
+
+function roll() {   // count prices up or down so a deal landing is visible
+  document.querySelectorAll('[data-roll]').forEach(el => {
+    const k = el.dataset.roll, to = +el.dataset.v, from = rolled[k] ?? to, t0 = performance.now();
+    rolled[k] = to;
+    if (from === to || reduced) return;
+    (function step(t) {
+      const f = Math.min(1, (t - t0) / 380);
+      el.textContent = inr(Math.round(from + (to - from) * (1 - (1 - f) ** 3)));
+      if (f < 1 && el.isConnected) requestAnimationFrame(step);
+    })(t0);
+  });
+}
+function render() {
+  const pay = S.view === 'checkout' || S.view === 'done', has = totals().items, list = S.view + S.cid + S.course;
+  const was = new Map(list === shown ? [...document.querySelectorAll('[data-d]')].map(el => [el.dataset.d, el.getBoundingClientRect()]) : []);
+  shown = list;
+  if (!has) S.open = false;
+  $('#app').classList.toggle('paying', pay);
+  $('#bar').innerHTML = bar();
+  $('#menu').innerHTML = VIEW[S.view]();
+  $('#side').className = 'side' + (S.open ? ' open' : '') + (has ? '' : ' empty');   // set on every screen, so an open sheet and its scrim never outlive a move to checkout
+  if (!pay) $('#side').innerHTML = side();
+  fresh = new Set();
+  // A dish that changes place in its list slides there, so one that drops to the end is seen going. Taps on the menu wait until it lands.
+  document.querySelectorAll('[data-d]').forEach(el => {
+    const a = was.get(el.dataset.d), b = el.getBoundingClientRect();
+    if (!a || (a.left === b.left && a.top === b.top)) return;
+    hold = performance.now() + 280;   // ponytail: one short hold for the whole menu. Narrow it to the rows that moved if it ever swallows a wanted tap.
+    if (!reduced) el.animate([{transform: `translate(${a.left - b.left}px,${a.top - b.top}px)`}, {transform: 'none'}], {duration: 300, easing: 'cubic-bezier(.3,.7,.2,1)'});
+  });
+  const tab = $('.courses [aria-selected=true]');
+  if (tab) tab.parentNode.scrollLeft = tab.offsetLeft - 16;   // on a phone the course tabs scroll sideways
+  roll();
+}
+function nav(view, patch) {
+  const run = () => { Object.assign(S, patch, {view, open: false}); render(); $('#menu').scrollTop = 0; scrollTo(0, 0); };
+  if (document.startViewTransition && !reduced) document.startViewTransition(run); else run();
+}
+function attract() {
+  let k = 0;
+  const show = () => {
+    const m = MENU[k++ % MENU.length];
+    $('#s-tray').innerHTML = tray(ids(m), {under: 2, fresh: reduced ? null : new Set([0, 1, 2, 3, 4])});
+    $('#s-now').innerHTML = `<div class="now gilt"><span><b>${esc(m.title)}</b><i>${m.country}, all five courses</i></span><strong>${inr(m.full.price)}</strong><em class="pill hot">save ${inr(m.full.save)}</em></div>`;
+  };
+  clearInterval(cycle); show(); cycle = setInterval(show, 4200);
+}
+function poke() {
+  clearTimeout(idleT);
+  if (!S.started || S.view === 'done') return;
+  idleT = setTimeout(() => {
+    let n = 15;
+    $('#still').hidden = false; $('#still-n').textContent = n;
+    stillT = setInterval(() => { $('#still-n').textContent = --n; if (!n) A.reset(); }, 1000);
+  }, IDLE_MS);
+}
+
+/* ---------- actions ---------- */
+const A = {
+  start: d => { S.started = true; S.mode = d.m; S.t0 = Date.now(); S.taps = 1; clearInterval(cycle); $('#start').hidden = true; $('#s-tray').innerHTML = ''; render(); },
+  home: () => S.view === 'done' ? A.reset() : nav('home'),
+  dishes: () => nav('dishes'),
+  course: d => { S.course = d.c; render(); const g = $('.grid2'); if (g.getBoundingClientRect().top < $('.courses').getBoundingClientRect().bottom) g.scrollIntoView(); },   // phone: back to the top of the list, under the pinned tabs
+  go: d => { document.querySelectorAll('.tile').forEach(t => { t.style.viewTransitionName = t.dataset.id === d.id ? 'hero' : ''; }); nav('country', {cid: d.id}); },
+  well: d => nav('dishes', {course: d.c}),
+  mode: () => { S.mode = S.mode === 'in' ? 'out' : 'in'; render(); },
+  more: () => { S.open = !S.open; render(); },
+  add: d => { if (d.rel) S.taken++; add([d.id]); },
+  journey: d => add(ids(BY[d.id]), true),
+  trio: d => add(ids(BY[d.id], TRIO), true),
+  lucky: () => { const m = MENU[Math.floor(Math.random() * MENU.length)]; S.view = 'country'; S.cid = m.id; add(ids(m), true); $('#menu').scrollTop = 0; scrollTo(0, 0); },
+  nudge: () => { const n = nudge(S.plates[S.at]); if (n) { S.taken++; add(n.add.map(i => i.id)); } },
+  quiet: () => { S.plates[S.at].quiet = true; render(); },
+  remove: d => {
+    S.plates[S.at].items.splice(+d.k, 1);
+    if (S.plates.length > 1 && !S.plates[S.at].items.length) { S.plates.splice(S.at, 1); S.at = Math.max(0, S.at - 1); }
+    render();
+  },
+  plate: d => { S.at = +d.i; render(); },
+  newplate: () => { let i = S.plates.findIndex(pl => !pl.items.length); if (i < 0) i = S.plates.push({items: []}) - 1; nav('home', {at: i}); },   // a new plate starts where every plate starts: at the journeys
+  checkout: () => nav('checkout'),
+  method: d => { S.pay = d.m; render(); },
+  drop: d => { S.plates.splice(+d.i, 1); if (!S.plates.length) S.plates.push({items: []}); S.at = 0; totals().items ? render() : nav('home'); },
+  extra: d => { const list = d.ids.split(','); if (+d.i < 0) S.plates.push({items: list}); else S.plates[+d.i].items.push(...list); S.b = false; S.taken++; render(); },
+  nob: () => { S.b = false; render(); },
+  paid: () => {
+    const t = totals();
+    S.receipt = {no: ++S.no, mode: S.mode, pay: S.pay, total: t.price, saved: t.save, duo: t.duo,
+      plates: live().map(x => ({deal: label(x.pr), price: x.pr.price, items: x.pl.items})),
+      taps: S.taps, secs: Math.round((Date.now() - S.t0) / 1000), shown: S.shown.length, taken: S.taken};
+    submitOrder(S.receipt);
+    nav('done');
+    let n = 20; clearInterval(autoT);
+    autoT = setInterval(() => { const el = $('#auto'); if (el) el.textContent = --n; if (!n) A.reset(); }, 1000);
+  },
+  awake: () => { clearInterval(stillT); $('#still').hidden = true; },
+  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; $('#still').hidden = true; $('#start').hidden = false; render(); attract(); }
+};
+document.addEventListener('pointerdown', e => { S.taps++; poke(); if (!$('#still').hidden && !e.target.closest('[data-a=reset]')) A.awake(); });
+document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b && A[b.dataset.a] && !(performance.now() < hold && b.closest('#menu'))) A[b.dataset.a](b.dataset); });
+
+/* ---------- self-check: run UJ.selfCheck() in the console ---------- */
+function selfCheck() {
+  const ok = (c, m) => { if (!c) throw new Error('selfCheck failed: ' + m); };
+  for (const m of MENU) {
+    ok(m.full.sets.length === 1 && m.full.sets[0].tier === 'journey' && m.full.price < m.full.list && m.full.price % 10 === 9, m.id + ' journey price');
+    ok(m.trio.sets[0].tier === 'trio' && m.trio.price < m.trio.list && m.trio.price < m.full.price, m.id + ' trio price');
+    for (const o of MENU) ok(totals([{items: ids(m)}, {items: ids(o)}]).price < m.full.price + o.full.price, m.id + '+' + o.id + ' duo');
+  }
+  const it = ids(MENU[0]), two = priceOf([...it, ...it]), odd = priceOf([it[0], it[0], it[1], it[3], it[2], it[2]]);
+  ok(two.sets.length === 2 && two.price === 2 * MENU[0].full.price, 'two of everything prices as two journeys');
+  ok(odd.sets.length === 1 && odd.sets[0].tier === 'trio' && odd.loose.length === 3 && odd.price === MENU[0].trio.price + 350 + 120 + 120, 'repeats beyond a deal are priced singly');
+  ok(sections(Array(9).fill(it[0])).rows.length === 3 && sections([...it, it[0]]).un === 6 && sections([...it, it[0], it[1]]).rows.length === 2, 'a plate grows rows instead of refusing dishes');
+  const keep = S; S = init(0); S.plates[0].items = [it[0]];
+  const r = ranked(MENU.map(m => m.items.sandwich)); S = keep;
+  ok(r[r.length - 1].id === it[0] && r.slice(0, -1).every((x, i, a) => !i || a[i - 1].price >= x.price), 'dishes on the plate list last, the rest dearest first');
+  let n = 0;   // every possible five-course plate: completing it from four dishes costs something, but less than the fifth dish alone
+  const walk = (k, p) => {
+    if (k === 5) {
+      const full = priceOf(p); n++;
+      p.forEach((id, j) => { const cost = full.price - priceOf(p.filter((_, x) => x !== j)).price; ok(cost > 0 && cost < ITEM[id].price, p + ' minus ' + id); });
+      return;
+    }
+    for (const m of MENU) walk(k + 1, [...p, m.items[COURSES[k]].id]);
+  };
+  walk(0, []);
+  return n + ' plates checked';
+}
+window.UJ = {selfCheck, priceOf, totals, MENU, state: () => S};
+
+/* ---------- boot (keeps the order across a republish in the viewer) ---------- */
+const boot = d => { if (d && d.plates) { S = d; $('#start').hidden = S.started; } render(); if (!S.started) attract(); };
+window.claude?.hot?.snapshot?.(() => S);
+if (window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(window.claude?.hot?.data);
+})();
+</script>
+</body>
+</html>
