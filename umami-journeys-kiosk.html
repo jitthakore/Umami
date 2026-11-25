@@ -972,7 +972,7 @@ function render() {
 }
 function nav(view, patch) {
   const from = S.view, run = () => { useFonts(); Object.assign(S, patch, {view, open: false}); render(); $('#menu').scrollTop = 0; scrollTo(0, 0);
-    if (view === 'home' && from === 'country') $(`.tile[data-id="${S.cid}"]`)?.scrollIntoView({block: 'center'}); };   // back from a journey, the wall returns to the tile that was opened, not to its top
+    if (view === 'home' && from === 'country' && !patch) $(`.tile[data-id="${S.cid}"]`)?.scrollIntoView({block: 'center'}); };   // back from a journey, the wall returns to the tile that was opened, not to its top. A new plate (which comes with a patch) starts at the top
   if (document.startViewTransition && !reduced) document.startViewTransition(run); else run();
 }
 function attract() {
