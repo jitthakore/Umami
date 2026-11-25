@@ -379,8 +379,8 @@ ul{list-style:none}
 @container (max-width:300px){
   .tile{padding:12px 12px 13px}
   .dish .d-buy{grid-column:1/-1}
-  .glyph{display:none}
 }
+@container (max-width:318px){.glyph{display:none}}   /* up to 350 px wide the brand mark gives its room to the eat-here button, so the bar stays two rows */
 @container (max-width:240px){.wall{--cols:1}}
 @media (max-width:1000px){
   .co{grid-template-columns:minmax(0,1fr)}
@@ -971,7 +971,8 @@ function render() {
   roll();
 }
 function nav(view, patch) {
-  const run = () => { useFonts(); Object.assign(S, patch, {view, open: false}); render(); $('#menu').scrollTop = 0; scrollTo(0, 0); };
+  const from = S.view, run = () => { useFonts(); Object.assign(S, patch, {view, open: false}); render(); $('#menu').scrollTop = 0; scrollTo(0, 0);
+    if (view === 'home' && from === 'country') $(`.tile[data-id="${S.cid}"]`)?.scrollIntoView({block: 'center'}); };   // back from a journey, the wall returns to the tile that was opened, not to its top
   if (document.startViewTransition && !reduced) document.startViewTransition(run); else run();
 }
 function attract() {
@@ -985,7 +986,7 @@ function attract() {
 }
 function poke() {
   clearTimeout(idleT);
-  if (!S.started || S.view === 'done') return;
+  if (!S.started || S.view === 'done' || document.hidden) return;   // a phone that switched apps or locked is not an idle kiosk: the clock stops, and starts again on return
   idleT = setTimeout(() => {
     let n = 15;
     $('#still').hidden = false; $('#still-n').textContent = n;
@@ -1010,9 +1011,11 @@ const A = {
   nudge: () => { const n = nudge(S.plates[S.at]); if (n) { S.taken++; add(n.add.map(i => i.id)); } },
   quiet: () => { S.plates[S.at].quiet = true; render(); },
   remove: d => {
+    const y = $('.p-mid').scrollTop;   // the list is rebuilt: keep its place, so the next dish down can be removed without scrolling back
     S.plates[S.at].items.splice(+d.k, 1);
     if (S.plates.length > 1 && !S.plates[S.at].items.length) { S.plates.splice(S.at, 1); S.at = Math.max(0, S.at - 1); }
     render();
+    $('.p-mid').scrollTop = y;
   },
   plate: d => { S.at = +d.i; render(); },
   newplate: () => { let i = S.plates.findIndex(pl => !pl.items.length); if (i < 0) i = S.plates.push({items: []}) - 1; nav('home', {at: i}); },   // a new plate starts where every plate starts: at the journeys
@@ -1032,8 +1035,9 @@ const A = {
     autoT = setInterval(() => { const el = $('#auto'); if (el) el.textContent = --n; if (!n) A.reset(); }, 1000);
   },
   awake: () => { clearInterval(stillT); $('#still').hidden = true; },
-  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; useFonts(); $('#still').hidden = true; $('#start').hidden = false; render(); attract(); }
+  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; useFonts(); $('#still').hidden = true; $('#start').hidden = false; render(); attract(); $('#menu').scrollTop = 0; scrollTo(0, 0); }   // the next order starts at the top, wherever this one was left
 };
+document.addEventListener('visibilitychange', () => { A.awake(); poke(); });
 document.addEventListener('pointerdown', e => { S.taps++; poke(); if (!$('#still').hidden && !e.target.closest('[data-a=reset]')) A.awake(); });
 document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b && A[b.dataset.a] && !(performance.now() < hold && b.closest('#menu'))) A[b.dataset.a](b.dataset); });
 
