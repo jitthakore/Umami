@@ -120,7 +120,7 @@ ul{list-style:none}
 .k-limb{fill:none;stroke:var(--green);stroke-width:4.5;stroke-linecap:round}
 .k-tool{fill:#C9BEAB;stroke:var(--green);stroke-width:1}
 .k-line{fill:none;stroke:#A99C86;stroke-width:2.6;stroke-linecap:round}
-.k-flow{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-dasharray:17;stroke-dashoffset:17;animation:k-flow 2.6s linear infinite}
+.k-flow{fill:none;stroke-width:2.4;stroke-linecap:round;transform-origin:62.5px 34px;transform:scaleY(0);animation:k-flow 2.6s linear infinite}   /* grows and drains by transform: a dash offset redraws the page 60 times a second */
 .k-arm{transform-origin:38px 37px;animation:k-stir 1.5s ease-in-out infinite}
 .k-pound .k-arm{animation:k-pound .8s cubic-bezier(.5,0,.9,.4) infinite}
 .k-chop .k-arm{animation:k-chop 1.5s ease-in-out infinite}
@@ -136,7 +136,7 @@ ul{list-style:none}
 @keyframes k-flip{0%,55%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}}
 @keyframes k-toss{0%,12%,55%,100%{transform:none}32%{transform:translateY(-15px) rotate(180deg)}}
 @keyframes k-pour{0%,100%{transform:rotate(0)}30%,75%{transform:rotate(18deg)}}
-@keyframes k-flow{0%,28%{stroke-dashoffset:17}38%,72%{stroke-dashoffset:0}82%,100%{stroke-dashoffset:-17}}
+@keyframes k-flow{0%,28%{transform:scaleY(0)}38%,72%{transform:none}82%,100%{transform:translateY(17px) scaleY(0)}}
 @keyframes k-roll{0%,100%{transform:translateX(-2px)}50%{transform:translateX(3px)}}
 @keyframes k-ball{50%{transform:rotate(180deg) scale(1.07,.93)}}
 
@@ -248,6 +248,7 @@ ul{list-style:none}
 /* food tokens: flat stacked layers that read as a dish from above and from the side */
 .tok{--r:50%;position:absolute;left:50%;top:50%;width:var(--s,76%);aspect-ratio:1;translate:-50% -50%;transform-style:preserve-3d}
 .tok>i{position:absolute;inset:0;display:block;border-radius:var(--r);background:var(--f);transform:translateZ(calc(var(--z) * var(--u)));box-shadow:inset 0 0 0 1px rgba(60,30,10,.1)}
+.tok.flat{transform-style:flat}   /* a flat drawing is one picture: left in 3D, the browser gives each of its parts a layer of its own, 500 of them on the wall */
 .tok.flat>i{transform:none}
 .flat .up{display:none}
 .tok.flat>.bun{translate:-12% -12%}
@@ -415,7 +416,7 @@ ul{list-style:none}
   .side:not(.open) .nudge{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;margin-top:10px;padding:8px 12px;font-size:14.5px}
   .side:not(.open) .nudge p{flex:1 1 240px}
   .side:not(.open) .n-btns{margin:0}
-  .side.open{animation:sheet .22s ease-out}
+  .side.open{animation:sheet .22s ease-out;touch-action:pinch-zoom}   /* a drag on the sheet does not move the page behind it; its dish list still scrolls */
   .side.open+.scrim{display:block;position:fixed;inset:0;z-index:4;background:rgba(11,31,23,.55);touch-action:none}
   .side.open .peek,.sum.all,.sum:has(+.pay) .amt{display:none}   /* with one plate its price is the total, which the Pay button already shows */
   .side.open .p-mid{overscroll-behavior:contain}
@@ -951,13 +952,18 @@ function render() {
   $('#menu').innerHTML = VIEW[S.view]();
   $('#side').className = 'side' + (S.open ? ' open' : '') + (has ? '' : ' empty');   // set on every screen, so an open sheet and its scrim never outlive a move to checkout
   if (!pay) $('#side').innerHTML = side();
-  // Every tap rebuilds the page, but a photo keeps the element it had: it is fetched once and stays in place, without loading or fading in again.
+  // Every tap rebuilds the page, but a photo keeps the element it had, a dish row's or a suggestion's: it is fetched once and stays in place, without loading or fading in again.
   for (const img of document.querySelectorAll('.slot img:not([src])')) {
-    const k = pics.findIndex(p => !p.isConnected && p.dataset.src === img.dataset.src);
+    const k = pics.findIndex(p => !p.isConnected && p.dataset.src === img.dataset.src && !p.closest('.rel') === !img.closest('.rel'));
     if (k >= 0) img.replaceWith(pics.splice(k, 1)[0]);
     else { img.src = img.dataset.src; if (img.complete && img.naturalWidth) img.className = 'in'; }   // new on this screen: one the browser still holds is in place at once
   }
-  for (const p of pics) if (!p.isConnected && !p.complete) p.src = '';   // a photo still on its way when its dish leaves the screen stops loading, and leaves the line to the photos now wanted
+  // A photo still loading when its dish leaves the screen lets go of the old page and goes on loading, to be there when the dish comes back.
+  // One that has not arrived after half a minute is given up, so a stalled link cannot hold the line for ever.
+  // ponytail: every photo of a list is asked for at once, so on a slow link a list waits behind the ones opened before it. Stopping those at once
+  // measured worse (at a quick pace through the course tabs nothing ever finished, and Safari does not stop a download anyway).
+  // If that wait matters, ask only for the photos near the screen, with an IntersectionObserver.
+  for (const p of pics) if (!p.isConnected && !p.complete) { p.remove(); setTimeout(() => p.complete || (p.src = ''), 3e4); }
   fresh = new Set();
   // A dish that changes place in its list slides there, so one that drops to the end is seen going. Taps on the menu wait until it lands.
   document.querySelectorAll('[data-d]').forEach(el => {
@@ -996,7 +1002,7 @@ function poke() {
 
 /* ---------- actions ---------- */
 const A = {
-  start: d => { S.started = true; S.mode = d.m; S.t0 = Date.now(); S.taps = 1; clearInterval(cycle); $('#start').hidden = true; $('#s-tray').innerHTML = ''; render(); },
+  start: d => { S.started = true; S.mode = d.m; S.t0 = Date.now(); S.taps = 1; clearInterval(cycle); $('#start').hidden = true; $('#s-tray').innerHTML = ''; render(); $('#menu').scrollTop = 0; scrollTo(0, 0); },   // an order starts at the top, wherever the last one, or a swipe on the start screen, left the page
   home: () => S.view === 'done' ? A.reset() : nav('home'),
   dishes: () => nav('dishes'),
   course: d => { S.course = d.c; render(); const g = $('.grid2'); if (g.getBoundingClientRect().top < $('.courses').getBoundingClientRect().bottom) g.scrollIntoView(); },   // phone: back to the top of the list, under the pinned tabs
@@ -1035,7 +1041,7 @@ const A = {
     autoT = setInterval(() => { const el = $('#auto'); if (el) el.textContent = --n; if (!n) A.reset(); }, 1000);
   },
   awake: () => { clearInterval(stillT); $('#still').hidden = true; },
-  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; useFonts(); $('#still').hidden = true; $('#start').hidden = false; render(); attract(); $('#menu').scrollTop = 0; scrollTo(0, 0); }   // the next order starts at the top, wherever this one was left
+  reset: () => { [stillT, autoT].forEach(clearInterval); clearTimeout(idleT); S = init(S.no); rolled = {}; useFonts(); $('#still').hidden = true; $('#start').hidden = false; render(); attract(); }
 };
 document.addEventListener('visibilitychange', () => { A.awake(); poke(); });
 document.addEventListener('pointerdown', e => { S.taps++; poke(); if (!$('#still').hidden && !e.target.closest('[data-a=reset]')) A.awake(); });
